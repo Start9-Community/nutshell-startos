@@ -1,0 +1,12 @@
+# Binaries
+image.tar
+nutshell.s9pk
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# StartOS build artifacts
+scripts/procedures/*.js
+ENVIRONMENT.txt

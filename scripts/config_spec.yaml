@@ -1,0 +1,59 @@
+# Nutshell Mint Config Spec
+mint_info:
+  type: object
+  name: "Mint Information"
+  description: "Descriptive information for your mint."
+  unique: true
+  spec:
+    name:
+      type: string
+      name: "Mint Name"
+      description: "A descriptive name for your sovereign mint."
+      placeholder: "My Sovereign Mint"
+      default: "My Sovereign Mint"
+    description:
+      type: string
+      name: "Mint Description"
+      description: "A short description of your mint."
+      default: "A private Cashu ecash mint."
+
+lightning:
+  type: object
+  name: "Lightning Backend"
+  description: "Configure how the mint connects to the Lightning Network."
+  unique: true
+  spec:
+    type:
+      type: enum
+      name: "Backend Type"
+      description: "Select the Lightning backend."
+      default: "CLNRpc"
+      values:
+        - CLNRpc
+        - FakeWallet
+        - LNbitsWallet
+      value-names:
+        CLNRpc: "Core Lightning (Internal RPC)"
+        FakeWallet: "Fake Wallet (Testing only)"
+        LNbitsWallet: "LNbits (Remote)"
+
+fees:
+  type: object
+  name: "Fee Settings"
+  description: "Optional fee settings for the mint."
+  unique: true
+  spec:
+    fee_percent:
+      type: number
+      name: "Fee Percentage"
+      description: "The percentage fee for Lightning invoices (e.g. 0.01 for 1%)."
+      range: "[0, 1]"
+      integral: false
+      default: 0
+    fee_reserve_min:
+      type: number
+      name: "Minimum Fee Reserve"
+      description: "The minimum satoshi fee reserve for outgoing payments."
+      range: "[0, 1000000]"
+      integral: true
+      default: 100
