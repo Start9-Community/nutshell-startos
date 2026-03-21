@@ -1,12 +1,8 @@
-# Binaries
+node_modules/
+javascript/
+*.s9pk
+dist/
+start-sdk
+start-os/
 image.tar
-nutshell.s9pk
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-
-# StartOS build artifacts
-scripts/procedures/*.js
-ENVIRONMENT.txt
+start-os/

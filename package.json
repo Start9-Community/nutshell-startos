@@ -1,0 +1,19 @@
+{
+  "name": "nutshell-startos",
+  "version": "0.19.2",
+  "description": "Nutshell Cashu Mint for StartOS",
+  "main": "javascript/index.js",
+  "scripts": {
+    "build": "npx ncc build startos/index.ts -o ./javascript"
+  },
+  "author": "Start9 Labs",
+  "license": "MIT",
+  "dependencies": {
+    "@start9labs/start-sdk": "^0.4.0-beta.59"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vercel/ncc": "^0.38.3",
+    "typescript": "^5.4.0"
+  }
+}
