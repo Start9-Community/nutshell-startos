@@ -7,8 +7,8 @@ RUN apt-get update && apt-get install -y \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Nutshell (Cashu)
-RUN pip install cashu==0.19.2
+# Install Nutshell (Cashu) — pin marshmallow<4 for environs compat
+RUN pip install "marshmallow<4" cashu==0.19.2
 
 # Set up data directory
 RUN mkdir -p /data
@@ -18,4 +18,4 @@ ENV MINT_DATABASE_DIR=/data
 EXPOSE 3338
 
 # Standard execution (StartOS will override this in setupMain)
-CMD ["python3", "-m", "cashu.mint.run"]
+CMD ["python3", "-m", "cashu.mint"]

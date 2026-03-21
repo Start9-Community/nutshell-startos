@@ -46,7 +46,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       'primary',
     ),
     exec: {
-      command: ['python3', '-m', 'cashu.mint.run'] as [string, ...string[]],
+      command: ['python3', '-m', 'cashu.mint'] as [string, ...string[]],
       env,
     },
     ready: {
