@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Nutshell (Cashu) — pin marshmallow<4 for environs compat
-RUN pip install "marshmallow<4" cashu==0.19.2
+RUN pip install "marshmallow<4" "limits<5" cashu==0.19.2
 
 # Set up data directory
 RUN mkdir -p /data

@@ -11,7 +11,7 @@ export const manifest = setupManifest({
   donationUrl: null,
   docsUrls: ['https://github.com/cashubtc/nutshell'],
   description: { short, long },
-  volumes: ['main', 'cln-data'],
+  volumes: ['main'],
   images: {
     main: {
       source: {

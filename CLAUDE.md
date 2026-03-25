@@ -9,45 +9,47 @@ StartOS v0.4.0 package for **Nutshell**, a Cashu ecash mint (Python). The packag
 ## Build Commands
 
 ```bash
-# Install dependencies
-npm install
+npm install            # install dependencies
+npm run build          # bundle startos/index.ts → javascript/index.js (uses @vercel/ncc)
 
-# Compile TypeScript to javascript/index.js
-npm run build          # runs esbuild bundling startos/index.ts
-
-# Build .s9pk package (requires start-cli installed)
-make                   # builds for all architectures (x86_64, aarch64)
-make x86_64            # single arch
-make aarch64           # single arch
+# Build .s9pk package (requires start-cli)
+make                   # builds for default architectures (x86_64, aarch64)
+make x86               # single arch (aliases: x86_64)
+make arm               # single arch (aliases: aarch64, arm64)
+make clean             # remove .s9pk, javascript/, node_modules/
+make install           # sideload to a StartOS device (needs ~/.startos/config.yaml host)
+make publish           # publish to registry (needs ~/.startos/config.yaml registry + s9pk-s3base, and s3cmd)
 ```
 
-The build pipeline: TypeScript (`startos/`) → esbuild → `javascript/index.js` → `start-cli` packages into `.s9pk`.
+The build pipeline: TypeScript (`startos/`) → ncc → `javascript/index.js` → `start-cli s9pk pack` → `.s9pk`. Shared build logic lives in `s9pk.mk` (included by `Makefile`); do not edit `s9pk.mk` directly.
 
 ## Architecture
 
-### TypeScript SDK Layer (`startos/`)
+### SDK Singleton Pattern
 
-All StartOS integration is in `startos/` using the v0.4.0 SDK pattern:
+All StartOS integration uses the v0.4.0 SDK pattern. The SDK singleton in `sdk.ts` is created via `StartSdk.of().withManifest(manifest).build(true)` — every procedure imports this `sdk` instance and calls `sdk.setup*()` methods to define lifecycle hooks.
 
-- **`index.ts`** — Entry point, re-exports all procedures and builds the manifest
-- **`sdk.ts`** — SDK singleton (`StartSdk.of().build(true)`)
-- **`manifest/index.ts`** — Service manifest: ID (`nutshell`), volumes (`main`, `cln-data`), images, dependency on `c-lightning`
-- **`procedures/`** — Lifecycle hooks:
-  - `main.ts` — Reads config, sets env vars, creates daemon on port 3338, mounts volumes
-  - `config.ts` — Config schema (mint info, lightning backend type, fees)
-  - `init.ts` — Initialization chain: restore → versionGraph → setInterfaces → setDependencies → actions → initializeService
-  - `interfaces.ts` — Exposes "Cashu Mint API" on port 3338 (HTTP)
-  - `dependencies.ts` — Requires c-lightning >=23.5.2
-  - `backups.ts` — Volume-based backup of `main`
-  - `actions.ts` — Custom actions (currently empty)
-- **`install/`** — Version graph and migration definitions
-- **`fileModels/config.yaml.ts`** — Type-safe config file model at `main/startos/config.yaml`
-- **`procedures/initializeService.ts`** — Generates 64-char hex private key on first install
+### Entry Point and Init Chain
+
+`index.ts` re-exports all procedures and calls `buildManifest(versionGraph, manifest)`. The init chain in `procedures/init.ts` wires together: restore → versionGraph → setInterfaces → setDependencies → actions → initializeService.
+
+### Lightning Integration (CLNRest)
+
+The mint connects to Core Lightning via **CLNRest** (not direct socket). In `procedures/main.ts`, when the backend is `CLNRestWallet`, the daemon discovers the CLNRest interface URL and rune from `sdk.serviceInterface.get()` using the `c-lightning` dependency's `clnrest` interface. There is no CLN volume mount — only a single `main` volume for mint data at `/data`.
+
+### Config and File Models
+
+Config is defined as a Zod schema in `fileModels/config.yaml.ts` using `FileHelper.yaml()`, stored at `main/startos/config.yaml`. The schema covers mint info (name, description), lightning backend type (`CLNRestWallet` | `FakeWallet` | `LNbitsWallet`), and fee settings.
+
+### Version Graph
+
+Package versions use `upstream:revision` format (e.g., `0.19.2:0`). New versions go in `install/versions/` as `VersionInfo.of()` objects and are wired into `install/versionGraph.ts`. The revision number increments for wrapper-only changes.
 
 ### Docker Layer
 
-The `Dockerfile` builds a Python 3.11-slim container with `cashu==0.19.2`. The mint runs on port 3338 with data stored in `/data`. Core Lightning socket is accessed via the `cln-data` volume mounted at `/home/bitcoin/.lightning`.
+`Dockerfile` builds a Python 3.11-slim container with `cashu==0.19.2` (pinned `marshmallow<4`, `limits<5`). The mint runs on port 3338.
 
-### Lightning Backend Options
+### Notable Dependencies
 
-Config supports three backends: **CLNRpc** (Core Lightning, default), **FakeWallet** (testing), and **LNbitsWallet**.
+- `start-os/` — Git submodule containing the StartOS source (reference only, not used in build).
+- `@start9labs/start-sdk ^0.4.0-beta` — The SDK is still in beta; API surface may change between minor versions.

@@ -7,7 +7,7 @@ const shape = z.object({
     description: z.string().optional().default('A private Cashu ecash mint.'),
   }),
   lightning: z.object({
-    type: z.enum(['CLNRpc', 'FakeWallet', 'LNbitsWallet']).optional().default('CLNRpc'),
+    type: z.enum(['CLNRestWallet', 'FakeWallet', 'LNbitsWallet']).optional().default('CLNRestWallet'),
   }),
   fees: z.object({
     fee_percent: z.number().optional().default(0),
