@@ -23,7 +23,18 @@ make publish           # publish to registry (needs ~/.startos/config.yaml regis
 
 The build pipeline: TypeScript (`startos/`) → ncc → `javascript/index.js` → `start-cli s9pk pack` → `.s9pk`. Shared build logic lives in `s9pk.mk` (included by `Makefile`); do not edit `s9pk.mk` directly.
 
+**Dev cycle:** `npm run build` to validate TypeScript changes, then `make x86 && make install` to sideload to a local StartOS device for testing. There are no unit tests — validation happens by sideloading the `.s9pk` and running the service.
+
 ## Architecture
+
+All TypeScript source lives under `startos/`. The directory is organized as:
+
+- `index.ts` — entry point, re-exports all procedures, calls `buildManifest(versionGraph, manifest)`
+- `sdk.ts` — SDK singleton
+- `manifest/` — package metadata and i18n strings
+- `fileModels/` — Zod-based config schema
+- `procedures/` — lifecycle hooks (init, main, backups, interfaces, dependencies, actions, initializeService)
+- `install/` — version graph and per-version migration definitions
 
 ### SDK Singleton Pattern
 
@@ -37,19 +48,33 @@ All StartOS integration uses the v0.4.0 SDK pattern. The SDK singleton in `sdk.t
 
 The mint connects to Core Lightning via **CLNRest** (not direct socket). In `procedures/main.ts`, when the backend is `CLNRestWallet`, the daemon discovers the CLNRest interface URL and rune from `sdk.serviceInterface.get()` using the `c-lightning` dependency's `clnrest` interface. There is no CLN volume mount — only a single `main` volume for mint data at `/data`.
 
+The rune is extracted from the interface's `addressInfo.suffix` via regex (`?rune=...` query param). The URL scheme `clnrest://` is replaced with `https://` both in TypeScript env construction and in a shell fixup at container exec time (belt-and-suspenders).
+
 ### Config and File Models
 
 Config is defined as a Zod schema in `fileModels/config.yaml.ts` using `FileHelper.yaml()`, stored at `main/startos/config.yaml`. The schema covers mint info (name, description), lightning backend type (`CLNRestWallet` | `FakeWallet` | `LNbitsWallet`), and fee settings.
 
 ### Version Graph
 
-Package versions use `upstream:revision` format (e.g., `0.19.2:0`). New versions go in `install/versions/` as `VersionInfo.of()` objects and are wired into `install/versionGraph.ts`. The revision number increments for wrapper-only changes.
+Package versions use `upstream:revision` format (e.g., `0.19.2:0`). New versions go in `startos/install/versions/` as `VersionInfo.of()` objects and are wired into `startos/install/versionGraph.ts`. The revision number increments for wrapper-only changes.
+
+**Adding a new version:** Create a new file in `startos/install/versions/` following the pattern of `v0.19.2.0.ts`, define `up`/`down` migrations, then import it in `versionGraph.ts` — set it as `current` and move the old version into the `other` array.
 
 ### Docker Layer
 
-`Dockerfile` builds a Python 3.11-slim container with `cashu==0.19.2` (pinned `marshmallow<4`, `limits<5`). The mint runs on port 3338.
+`Dockerfile` builds a Python 3.11-slim container with `cashu==0.19.2` (pinned `marshmallow<4`, `limits<5`). The mint runs on port 3338. The container command is `python3 -m cashu.mint`, configured entirely through environment variables set in `procedures/main.ts`.
+
+### Key Environment Variables (set at runtime in main.ts)
+
+| Variable | Source |
+|---|---|
+| `MINT_BACKEND_BOLT11_SAT` | Config `lightning.type` (wallet backend selector) |
+| `MINT_CLNREST_URL` | Discovered from c-lightning's `clnrest` interface |
+| `MINT_CLNREST_RUNE` | Extracted from interface suffix query param |
+| `MINT_PRIVATE_KEY` | Read from volume file `mint_private_key` |
+| `MINT_DATABASE_DIR` | Always `/data` (the mounted volume) |
 
 ### Notable Dependencies
 
-- `start-os/` — Git submodule containing the StartOS source (reference only, not used in build).
+- `start-os/` — Local copy of StartOS source (reference only, not used in build).
 - `@start9labs/start-sdk ^0.4.0-beta` — The SDK is still in beta; API surface may change between minor versions.
