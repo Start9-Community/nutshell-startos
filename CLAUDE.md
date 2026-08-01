@@ -48,7 +48,7 @@ All StartOS integration uses the v0.4.0 SDK pattern. The SDK singleton in `sdk.t
 
 The mint connects to Core Lightning via **CLNRest** (not direct socket). In `procedures/main.ts`, when the backend is `CLNRestWallet`, the daemon discovers the CLNRest interface URL and rune from `sdk.serviceInterface.get()` using the `c-lightning` dependency's `clnrest` interface. There is no CLN volume mount — only a single `main` volume for mint data at `/data`.
 
-The rune is extracted from the interface's `addressInfo.suffix` via regex (`?rune=...` query param). The URL scheme `clnrest://` is replaced with `https://` both in TypeScript env construction and in a shell fixup at container exec time (belt-and-suspenders).
+The rune is extracted from the interface's `addressInfo.suffix` via regex (`?rune=...` query param). The URL scheme `clnrest://` is replaced with `http://` both in TypeScript env construction and in a shell fixup at container exec time (belt-and-suspenders).
 
 ### Config and File Models
 

@@ -17,6 +17,10 @@ export const main = sdk.setupMain(async ({ effects }) => {
     MINT_INFO_DESCRIPTION_LONG: config?.mint_info.description_long ?? '',
     MINT_INFO_MOTD: config?.mint_info.motd ?? '',
 
+    // Mint info (optional metadata)
+    ...(config?.mint_info.icon_url ? { MINT_INFO_ICON_URL: config.mint_info.icon_url } : {}),
+    ...(config?.mint_info.tos_url ? { MINT_INFO_TOS_URL: config.mint_info.tos_url } : {}),
+
     // Lightning backend
     MINT_BACKEND_BOLT11_SAT: config?.lightning.type ?? 'CLNRestWallet',
 
@@ -46,6 +50,13 @@ export const main = sdk.setupMain(async ({ effects }) => {
     MINT_GLOBAL_RATE_LIMIT_PER_MINUTE: String(config?.advanced?.rate_limit_per_minute ?? 60),
   }
 
+  // Build NUT-06 contact list from individual contact fields
+  const contactList: string[][] = []
+  if (config?.mint_info.contact_email) contactList.push(['email', config.mint_info.contact_email])
+  if (config?.mint_info.contact_nostr) contactList.push(['nostr', config.mint_info.contact_nostr])
+  if (config?.mint_info.contact_twitter) contactList.push(['twitter', config.mint_info.contact_twitter])
+  if (contactList.length > 0) env['MINT_INFO_CONTACT'] = JSON.stringify(contactList)
+
   // Only set peg/balance limits when non-zero (unset = unlimited in Cashu)
   const maxPegIn = config?.advanced?.max_peg_in ?? 0
   if (maxPegIn > 0) env['MINT_MAX_PEG_IN'] = String(maxPegIn)
@@ -66,7 +77,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       const hostname = bridgeAddresses.hostnames[0]
       if (hostname) {
         const clnPort = hostname.port ?? clnInterface.addressInfo.internalPort
-        env['MINT_CLNREST_URL'] = `https://${hostname.hostname}:${clnPort}`
+        env['MINT_CLNREST_URL'] = `http://${hostname.hostname}:${clnPort}`
 
         const suffix = clnInterface.addressInfo.suffix ?? ''
         const runeMatch = suffix.match(/[?&]rune=([^&]*)/)
@@ -75,9 +86,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
     }
 
     // Fixup: if MINT_CLNREST_URL still has a non-HTTP scheme (e.g. clnrest://
-    // auto-injected by StartOS), replace it with https://
+    // auto-injected by StartOS), replace it with http://
     if (env['MINT_CLNREST_URL'] && !/^https?:\/\//.test(env['MINT_CLNREST_URL'])) {
-      env['MINT_CLNREST_URL'] = env['MINT_CLNREST_URL'].replace(/^[a-z]+:\/\//, 'https://')
+      env['MINT_CLNREST_URL'] = env['MINT_CLNREST_URL'].replace(/^[a-z]+:\/\//, 'http://')
     }
   }
 
@@ -97,9 +108,9 @@ export const main = sdk.setupMain(async ({ effects }) => {
     exec: {
       command: [
         'sh', '-c',
-        // Fix clnrest:// scheme auto-injected by StartOS — cashu needs https://
+        // Fix clnrest:// scheme auto-injected by StartOS — cashu needs http://
         'if echo "$MINT_CLNREST_URL" | grep -q "^clnrest://"; then ' +
-          'export MINT_CLNREST_URL="https://${MINT_CLNREST_URL#clnrest://}"; ' +
+          'export MINT_CLNREST_URL="http://${MINT_CLNREST_URL#clnrest://}"; ' +
         'fi; ' +
         'exec python3 -m cashu.mint',
       ] as [string, ...string[]],

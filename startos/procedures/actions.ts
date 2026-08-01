@@ -3,6 +3,175 @@ import { configYaml } from '../fileModels/config.yaml'
 
 const { InputSpec, Value } = sdk
 
+// --- Action 0: Mint Info ---
+
+const mintInfoSpec = InputSpec.of({
+  name: Value.text({
+    name: 'Mint Name',
+    description: 'Display name shown to wallets connecting to your mint (NUT-06).',
+    warning: null,
+    default: 'My Sovereign Mint',
+    required: true,
+    placeholder: 'My Sovereign Mint',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'text',
+  }),
+  description: Value.text({
+    name: 'Description',
+    description: 'Short description of your mint.',
+    warning: null,
+    default: 'A private Cashu ecash mint.',
+    required: false,
+    placeholder: 'A private Cashu ecash mint.',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'text',
+  }),
+  description_long: Value.text({
+    name: 'Long Description',
+    description: 'Extended description with more detail about your mint.',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: '',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'text',
+  }),
+  motd: Value.text({
+    name: 'Message of the Day',
+    description: 'Temporary notice shown to wallet users.',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: '',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'text',
+  }),
+  contact_email: Value.text({
+    name: 'Contact Email',
+    description: 'Operator email address (shown in NUT-06 mint info).',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: 'admin@example.com',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'email',
+  }),
+  contact_nostr: Value.text({
+    name: 'Contact Nostr',
+    description: 'Operator Nostr public key (npub or hex).',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: 'npub1...',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'text',
+  }),
+  contact_twitter: Value.text({
+    name: 'Contact Twitter/X',
+    description: 'Operator Twitter/X handle.',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: '@handle',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'text',
+  }),
+  icon_url: Value.text({
+    name: 'Icon URL',
+    description: 'URL to your mint\'s icon or logo image.',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: 'https://example.com/icon.png',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'url',
+  }),
+  tos_url: Value.text({
+    name: 'Terms of Service URL',
+    description: 'Link to your mint\'s terms of service.',
+    warning: null,
+    default: '',
+    required: false,
+    placeholder: 'https://example.com/tos',
+    masked: false,
+    minLength: null,
+    maxLength: null,
+    patterns: [],
+    inputmode: 'url',
+  }),
+})
+
+const configureMintInfo = sdk.Action.withInput(
+  'configure-mint-info',
+
+  async ({ effects }) => ({
+    name: 'Mint Info',
+    description: 'Configure mint name, description, contacts, and public metadata (NUT-06).',
+    warning: null,
+    allowedStatuses: 'any' as const,
+    group: 'Configuration',
+    visibility: 'enabled' as const,
+  }),
+
+  mintInfoSpec,
+
+  async ({ effects }) => {
+    const config = await configYaml.read().once()
+    const mi = config?.mint_info
+    return {
+      name: mi?.name || 'My Sovereign Mint',
+      description: mi?.description || 'A private Cashu ecash mint.',
+      description_long: mi?.description_long || '',
+      motd: mi?.motd || '',
+      contact_email: mi?.contact_email || '',
+      contact_nostr: mi?.contact_nostr || '',
+      contact_twitter: mi?.contact_twitter || '',
+      icon_url: mi?.icon_url || '',
+      tos_url: mi?.tos_url || '',
+    }
+  },
+
+  async ({ effects, input }) => {
+    await configYaml.merge(effects, {
+      mint_info: {
+        name: input.name,
+        description: input.description ?? '',
+        description_long: input.description_long ?? '',
+        motd: input.motd ?? '',
+        contact_email: input.contact_email ?? '',
+        contact_nostr: input.contact_nostr ?? '',
+        contact_twitter: input.contact_twitter ?? '',
+        icon_url: input.icon_url ?? '',
+        tos_url: input.tos_url ?? '',
+      },
+    })
+  },
+)
+
 // --- Action 1: Network Settings ---
 
 const networkSpec = InputSpec.of({
@@ -283,6 +452,7 @@ const showMintInfo = sdk.Action.withoutInput(
 // --- Export all actions ---
 
 export const actions = sdk.Actions.of()
+  .addAction(configureMintInfo)
   .addAction(configureNetwork)
   .addAction(configureAdvanced)
   .addAction(showMintInfo)
