@@ -4,7 +4,9 @@
   "description": "Nutshell Cashu Mint for StartOS",
   "main": "javascript/index.js",
   "scripts": {
-    "build": "npx ncc build startos/index.ts -o ./javascript"
+    "build": "npx ncc build startos/index.ts -o ./javascript",
+    "check": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "author": "Start9 Labs",
   "license": "MIT",
@@ -14,6 +16,7 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@vercel/ncc": "^0.38.3",
+    "tsx": "4.23.4",
     "typescript": "^5.4.0"
   }
 }
