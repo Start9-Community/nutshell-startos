@@ -1,6 +1,9 @@
 import { sdk } from '../sdk'
 import { configYaml } from '../fileModels/config.yaml'
 
+const clnrestHostId = 'clnrest'
+const clnrestPort = 3010
+
 export const main = sdk.setupMain(async ({ effects }) => {
   const config = await configYaml.read().const(effects)
 
@@ -68,21 +71,32 @@ export const main = sdk.setupMain(async ({ effects }) => {
   if (maxBalance > 0) env['MINT_MAX_BALANCE'] = String(maxBalance)
 
   if ((config?.lightning.type ?? 'CLNRestWallet') === 'CLNRestWallet') {
-    const clnInterface = await sdk.serviceInterface
-      .get(effects, { id: 'clnrest', packageId: 'c-lightning' })
+    const clnrestAddress = await sdk.host
+      .getBridgeAddress(effects, {
+        packageId: 'c-lightning',
+        hostId: clnrestHostId,
+        internalPort: clnrestPort,
+        ssl: false,
+      })
       .const()
 
-    if (clnInterface?.addressInfo) {
-      const bridgeAddresses = clnInterface.addressInfo.filter({ kind: 'bridge' })
-      const hostname = bridgeAddresses.hostnames[0]
-      if (hostname) {
-        const clnPort = hostname.port ?? clnInterface.addressInfo.internalPort
-        env['MINT_CLNREST_URL'] = `http://${hostname.hostname}:${clnPort}`
+    const clnrestSuffix = await sdk.host
+      .get(
+        effects,
+        { packageId: 'c-lightning', hostId: clnrestHostId },
+        (host) =>
+          host?.bindings[clnrestPort]?.interfaces['clnrest']?.addressInfo
+            .suffix ?? null,
+      )
+      .const()
 
-        const suffix = clnInterface.addressInfo.suffix ?? ''
-        const runeMatch = suffix.match(/[?&]rune=([^&]*)/)
-        env['MINT_CLNREST_RUNE'] = runeMatch ? decodeURIComponent(runeMatch[1]) : ''
-      }
+    if (clnrestAddress) {
+      env['MINT_CLNREST_URL'] = `http://${clnrestAddress}`
+
+      const runeMatch = clnrestSuffix?.match(/[?&]rune=([^&]*)/)
+      env['MINT_CLNREST_RUNE'] = runeMatch
+        ? decodeURIComponent(runeMatch[1])
+        : ''
     }
 
     // Fixup: if MINT_CLNREST_URL still has a non-HTTP scheme (e.g. clnrest://
