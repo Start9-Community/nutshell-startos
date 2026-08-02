@@ -38,7 +38,7 @@ choices will not be presented as working production configurations.
 - Advertise and build `x86_64` and `aarch64` packages.
 - Mount the StartOS `main` volume at `/data`.
 - Set `MINT_DATABASE=/data/mint` explicitly. This resolves to the same
-  `/data/mint.sqlite3` database used by the existing package while avoiding
+  `/data/mint/mint.sqlite3` database used by the existing package while avoiding
   reliance on container working-directory behavior.
 - Run the upstream-supported mint command and configure it through environment
   variables.

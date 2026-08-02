@@ -9,7 +9,7 @@ working Start9 Community package patterns.
 - The official Nutshell image, version, digest, and architectures are defined in
   `startos/upstream.ts`.
 - Persistent data is the `main` volume mounted at `/data`.
-- The SQLite database is `/data/mint.sqlite3` and the mint seed is
+- The SQLite database is `/data/mint/mint.sqlite3` and the mint seed is
   `/data/mint_private_key`.
 - Core Lightning is a required dependency. Runtime access uses its `clnrest`
   host binding over the plaintext StartOS bridge and the rune in the exported

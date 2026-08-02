@@ -50,7 +50,7 @@ backups.
 
 | Path | Purpose |
 | --- | --- |
-| `/data/mint.sqlite3` | Nutshell SQLite database |
+| `/data/mint/mint.sqlite3` | Nutshell SQLite database |
 | `/data/mint_private_key` | StartOS-generated mint seed |
 | `/data/startos/config.yaml` | StartOS-managed operator settings |
 
