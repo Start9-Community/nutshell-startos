@@ -1,10 +1,6 @@
 import { sdk } from '../sdk'
 import { configYaml } from '../fileModels/config.yaml'
-import {
-  MINT_DATABASE,
-  MINT_HOST,
-  MINT_PORT,
-} from '../config/mintEnvironment'
+import { MINT_DATABASE, MINT_HOST, MINT_PORT } from '../config/mintEnvironment'
 
 const { InputSpec, Value } = sdk
 
@@ -13,7 +9,8 @@ const { InputSpec, Value } = sdk
 const mintInfoSpec = InputSpec.of({
   name: Value.text({
     name: 'Mint Name',
-    description: 'Display name shown to wallets connecting to your mint (NUT-06).',
+    description:
+      'Display name shown to wallets connecting to your mint (NUT-06).',
     warning: null,
     default: 'My Sovereign Mint',
     required: true,
@@ -104,7 +101,7 @@ const mintInfoSpec = InputSpec.of({
   }),
   icon_url: Value.text({
     name: 'Icon URL',
-    description: 'URL to your mint\'s icon or logo image.',
+    description: "URL to your mint's icon or logo image.",
     warning: null,
     default: '',
     required: false,
@@ -117,7 +114,7 @@ const mintInfoSpec = InputSpec.of({
   }),
   tos_url: Value.text({
     name: 'Terms of Service URL',
-    description: 'Link to your mint\'s terms of service.',
+    description: "Link to your mint's terms of service.",
     warning: null,
     default: '',
     required: false,
@@ -135,7 +132,8 @@ const configureMintInfo = sdk.Action.withInput(
 
   async ({ effects }) => ({
     name: 'Mint Info',
-    description: 'Configure mint name, description, contacts, and public metadata (NUT-06).',
+    description:
+      'Configure mint name, description, contacts, and public metadata (NUT-06).',
     warning: null,
     allowedStatuses: 'any' as const,
     group: 'Configuration',
@@ -240,7 +238,8 @@ const configureFees = sdk.Action.withInput(
 const advancedSpec = InputSpec.of({
   log_level: Value.select({
     name: 'Log Level',
-    description: 'Controls verbosity of mint logs. DEBUG is useful for troubleshooting.',
+    description:
+      'Controls verbosity of mint logs. DEBUG is useful for troubleshooting.',
     warning: null,
     default: 'INFO',
     values: {
@@ -312,7 +311,8 @@ const advancedSpec = InputSpec.of({
   }),
   rate_limit_per_minute: Value.number({
     name: 'Rate Limit (req/min)',
-    description: 'Maximum API requests per minute when rate limiting is enabled.',
+    description:
+      'Maximum API requests per minute when rate limiting is enabled.',
     warning: null,
     default: 60,
     required: true,
@@ -376,7 +376,9 @@ const showMintInfo = sdk.Action.withoutInput(
 
     let keyStatus = 'MISSING'
     try {
-      const key = String(await sdk.volumes.main.readFile('mint_private_key', 'utf-8'))
+      const key = String(
+        await sdk.volumes.main.readFile('mint_private_key', 'utf-8'),
+      )
       if (key && key.trim().length > 0) {
         keyStatus = `Present (${key.trim().length} chars)`
       }

@@ -55,7 +55,10 @@ test('stores the SQLite database on the StartOS data volume explicitly', async (
 })
 
 test('exposes only the supported CLNRest backend and fixed internal network', async () => {
-  const configSource = await readFile('startos/fileModels/config.yaml.ts', 'utf8')
+  const configSource = await readFile(
+    'startos/fileModels/config.yaml.ts',
+    'utf8',
+  )
   const actionsSource = await readFile('startos/procedures/actions.ts', 'utf8')
   const interfacesSource = await readFile(
     'startos/procedures/interfaces.ts',
@@ -84,7 +87,10 @@ test('includes the Community Registry documentation and automation surface', asy
   await Promise.all(requiredFiles.map((path) => access(path)))
 
   const readme = await readFile('README.md', 'utf8')
-  assert.doesNotMatch(readme, new RegExp(UPSTREAM_VERSION.replaceAll('.', '\\.')))
+  assert.doesNotMatch(
+    readme,
+    new RegExp(UPSTREAM_VERSION.replaceAll('.', '\\.')),
+  )
   assert.match(readme, /## Image and Container Runtime/)
   assert.match(readme, /## Actions \(StartOS UI\)/)
   assert.match(readme, /## Quick Reference for AI Consumers/)

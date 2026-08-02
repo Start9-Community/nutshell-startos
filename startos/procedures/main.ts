@@ -1,9 +1,6 @@
 import { sdk } from '../sdk'
 import { configYaml } from '../fileModels/config.yaml'
-import {
-  buildMintEnvironment,
-  MINT_PORT,
-} from '../config/mintEnvironment'
+import { buildMintEnvironment, MINT_PORT } from '../config/mintEnvironment'
 
 const clnrestHostId = 'clnrest'
 const clnrestInterfaceId = 'clnrest'
@@ -29,8 +26,8 @@ export const main = sdk.setupMain(async ({ effects }) => {
       effects,
       { packageId: 'c-lightning', hostId: clnrestHostId },
       (host) =>
-        host?.bindings[clnrestPort]?.interfaces[clnrestInterfaceId]
-          ?.addressInfo.suffix ?? null,
+        host?.bindings[clnrestPort]?.interfaces[clnrestInterfaceId]?.addressInfo
+          .suffix ?? null,
     )
     .const()
 

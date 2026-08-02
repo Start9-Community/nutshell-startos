@@ -1,9 +1,6 @@
 import { setupManifest } from '@start9labs/start-sdk'
 import { short, long } from './i18n'
-import {
-  SUPPORTED_ARCHITECTURES,
-  UPSTREAM_IMAGE_REFERENCE,
-} from '../upstream'
+import { SUPPORTED_ARCHITECTURES, UPSTREAM_IMAGE_REFERENCE } from '../upstream'
 
 export const manifest = setupManifest({
   id: 'nutshell',
