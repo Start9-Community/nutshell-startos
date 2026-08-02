@@ -1,14 +1,10 @@
 import { sdk } from '../sdk'
-import { configYaml } from '../fileModels/config.yaml'
+import { MINT_PORT } from '../config/mintEnvironment'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
-  const config = await configYaml.read().const(effects)
-  const port = config?.network?.listen_port ?? 3338
-  const protocol = config?.network?.protocol ?? 'http'
-
   const apiMulti = sdk.MultiHost.of(effects, 'api-multi')
-  const apiOrigin = await apiMulti.bindPort(port, {
-    protocol,
+  const apiOrigin = await apiMulti.bindPort(MINT_PORT, {
+    protocol: 'http',
   })
   const api = sdk.createInterface(effects, {
     name: 'Cashu Mint API',

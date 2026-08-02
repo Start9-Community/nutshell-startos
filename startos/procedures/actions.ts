@@ -1,5 +1,10 @@
 import { sdk } from '../sdk'
 import { configYaml } from '../fileModels/config.yaml'
+import {
+  MINT_DATABASE,
+  MINT_HOST,
+  MINT_PORT,
+} from '../config/mintEnvironment'
 
 const { InputSpec, Value } = sdk
 
@@ -172,74 +177,7 @@ const configureMintInfo = sdk.Action.withInput(
   },
 )
 
-// --- Action 1: Network Settings ---
-
-const networkSpec = InputSpec.of({
-  listen_host: Value.select({
-    name: 'Bind Address',
-    description: 'Which network interfaces the mint listens on inside the container.',
-    warning: null,
-    default: '0.0.0.0',
-    values: {
-      '0.0.0.0': 'All Interfaces (0.0.0.0)',
-      '127.0.0.1': 'Localhost Only (127.0.0.1)',
-    },
-  }),
-  listen_port: Value.number({
-    name: 'Listen Port',
-    description: 'TCP port the mint listens on. Must be between 1024 and 65535.',
-    warning: null,
-    default: 3338,
-    required: true,
-    min: 1024,
-    max: 65535,
-    integer: true,
-    units: null,
-    placeholder: '3338',
-  }),
-  protocol: Value.select({
-    name: 'Protocol',
-    description:
-      'HTTP exposes the API without SSL wrapping (recommended for Holesail tunnels). ' +
-      'HTTPS adds StartOS SSL termination.',
-    warning: null,
-    default: 'http',
-    values: {
-      http: 'HTTP (no SSL wrapper)',
-      https: 'HTTPS (SSL-wrapped)',
-    },
-  }),
-})
-
-const configureNetwork = sdk.Action.withInput(
-  'configure-network',
-
-  async ({ effects }) => ({
-    name: 'Network Settings',
-    description: 'Configure bind address, port, and protocol.',
-    warning: null,
-    allowedStatuses: 'any' as const,
-    group: 'Configuration',
-    visibility: 'enabled' as const,
-  }),
-
-  networkSpec,
-
-  async ({ effects }) => {
-    const config = await configYaml.read().once()
-    return {
-      listen_host: config?.network?.listen_host ?? '0.0.0.0',
-      listen_port: config?.network?.listen_port ?? 3338,
-      protocol: config?.network?.protocol ?? 'http',
-    }
-  },
-
-  async ({ effects, input }) => {
-    await configYaml.merge(effects, { network: input })
-  },
-)
-
-// --- Action 2: Advanced Settings ---
+// --- Action 1: Advanced Settings ---
 
 const advancedSpec = InputSpec.of({
   log_level: Value.select({
@@ -312,7 +250,7 @@ const advancedSpec = InputSpec.of({
     name: 'Rate Limiting',
     description: 'Enable global rate limiting on API requests.',
     warning: null,
-    default: false,
+    default: true,
   }),
   rate_limit_per_minute: Value.number({
     name: 'Rate Limit (req/min)',
@@ -351,7 +289,7 @@ const configureAdvanced = sdk.Action.withInput(
       max_peg_out: config?.advanced?.max_peg_out ?? 0,
       max_balance: config?.advanced?.max_balance ?? 0,
       peg_out_only: config?.advanced?.peg_out_only ?? false,
-      rate_limit: config?.advanced?.rate_limit ?? false,
+      rate_limit: config?.advanced?.rate_limit ?? true,
       rate_limit_per_minute: config?.advanced?.rate_limit_per_minute ?? 60,
     }
   },
@@ -361,7 +299,7 @@ const configureAdvanced = sdk.Action.withInput(
   },
 )
 
-// --- Action 3: Mint Status ---
+// --- Action 2: Mint Status ---
 
 const showMintInfo = sdk.Action.withoutInput(
   'show-mint-info',
@@ -388,9 +326,6 @@ const showMintInfo = sdk.Action.withoutInput(
       keyStatus = 'MISSING'
     }
 
-    const host = config?.network?.listen_host ?? '0.0.0.0'
-    const port = config?.network?.listen_port ?? 3338
-
     return {
       version: '1' as const,
       title: 'Mint Status',
@@ -411,7 +346,7 @@ const showMintInfo = sdk.Action.withoutInput(
             name: 'Lightning Backend',
             description: 'The configured wallet backend.',
             type: 'single' as const,
-            value: config?.lightning?.type ?? 'CLNRestWallet',
+            value: 'CLNRestWallet',
             copyable: false,
             qr: false,
             masked: false,
@@ -420,7 +355,7 @@ const showMintInfo = sdk.Action.withoutInput(
             name: 'Listen Address',
             description: 'The address and port the mint is bound to.',
             type: 'single' as const,
-            value: `${host}:${port}`,
+            value: `${MINT_HOST}:${MINT_PORT}`,
             copyable: true,
             qr: false,
             masked: false,
@@ -429,7 +364,7 @@ const showMintInfo = sdk.Action.withoutInput(
             name: 'Database Path',
             description: 'Where mint data is stored inside the container.',
             type: 'single' as const,
-            value: '/data',
+            value: `${MINT_DATABASE}.sqlite3`,
             copyable: false,
             qr: false,
             masked: false,
@@ -453,6 +388,5 @@ const showMintInfo = sdk.Action.withoutInput(
 
 export const actions = sdk.Actions.of()
   .addAction(configureMintInfo)
-  .addAction(configureNetwork)
   .addAction(configureAdvanced)
   .addAction(showMintInfo)

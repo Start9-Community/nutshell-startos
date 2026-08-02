@@ -45,8 +45,26 @@ test('uses the official immutable multi-architecture image', async () => {
 })
 
 test('stores the SQLite database on the StartOS data volume explicitly', async () => {
-  const mainSource = await readFile('startos/procedures/main.ts', 'utf8')
+  const environmentSource = await readFile(
+    'startos/config/mintEnvironment.ts',
+    'utf8',
+  )
 
-  assert.match(mainSource, /MINT_DATABASE:\s*'\/data\/mint'/)
-  assert.doesNotMatch(mainSource, /MINT_DATABASE_DIR/)
+  assert.match(environmentSource, /MINT_DATABASE\s*=\s*'\/data\/mint'/)
+  assert.doesNotMatch(environmentSource, /MINT_DATABASE_DIR/)
+})
+
+test('exposes only the supported CLNRest backend and fixed internal network', async () => {
+  const configSource = await readFile('startos/fileModels/config.yaml.ts', 'utf8')
+  const actionsSource = await readFile('startos/procedures/actions.ts', 'utf8')
+  const interfacesSource = await readFile(
+    'startos/procedures/interfaces.ts',
+    'utf8',
+  )
+
+  assert.doesNotMatch(configSource, /FakeWallet|LNbitsWallet/)
+  assert.doesNotMatch(configSource, /listen_host|listen_port|protocol/)
+  assert.doesNotMatch(actionsSource, /configure-network/)
+  assert.match(interfacesSource, /bindPort\(MINT_PORT/)
+  assert.match(interfacesSource, /protocol:\s*'http'/)
 })

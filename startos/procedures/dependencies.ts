@@ -4,7 +4,7 @@ export const setDependencies = sdk.setupDependencies(async ({ effects }) => {
   return {
     'c-lightning': {
       kind: 'running' as const,
-      versionRange: '>=23.5.2',
+      versionRange: '>=23.8',
       healthChecks: [],
     },
   }
