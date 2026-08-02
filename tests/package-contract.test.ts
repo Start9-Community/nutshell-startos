@@ -35,3 +35,18 @@ test('distinguishes the wrapper repository from the upstream repository', async 
     /upstreamRepo:\s*'https:\/\/github\.com\/cashubtc\/nutshell'/,
   )
 })
+
+test('uses the official immutable multi-architecture image', async () => {
+  const manifestSource = await readFile('startos/manifest/index.ts', 'utf8')
+
+  assert.match(manifestSource, /dockerTag:\s*UPSTREAM_IMAGE_REFERENCE/)
+  assert.match(manifestSource, /arch:\s*\[\.\.\.SUPPORTED_ARCHITECTURES\]/)
+  assert.doesNotMatch(manifestSource, /dockerBuild/)
+})
+
+test('stores the SQLite database on the StartOS data volume explicitly', async () => {
+  const mainSource = await readFile('startos/procedures/main.ts', 'utf8')
+
+  assert.match(mainSource, /MINT_DATABASE:\s*'\/data\/mint'/)
+  assert.doesNotMatch(mainSource, /MINT_DATABASE_DIR/)
+})

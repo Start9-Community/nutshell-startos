@@ -1,5 +1,9 @@
 import { setupManifest } from '@start9labs/start-sdk'
 import { short, long } from './i18n'
+import {
+  SUPPORTED_ARCHITECTURES,
+  UPSTREAM_IMAGE_REFERENCE,
+} from '../upstream'
 
 export const manifest = setupManifest({
   id: 'nutshell',
@@ -14,21 +18,9 @@ export const manifest = setupManifest({
   volumes: ['main'],
   images: {
     main: {
-      source: {
-        dockerBuild: {
-          dockerfile: './Dockerfile',
-          workdir: '.',
-        },
-      },
+      source: { dockerTag: UPSTREAM_IMAGE_REFERENCE },
+      arch: [...SUPPORTED_ARCHITECTURES],
     },
-  },
-  alerts: {
-    install: null,
-    update: null,
-    uninstall: null,
-    restore: null,
-    start: null,
-    stop: null,
   },
   dependencies: {
     'c-lightning': {

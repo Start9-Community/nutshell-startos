@@ -32,7 +32,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     LIGHTNING_RESERVE_FEE_MIN: String(config?.fees.fee_reserve_min ?? 100),
 
     // Database
-    MINT_DATABASE_DIR: '/data',
+    MINT_DATABASE: '/data/mint',
 
     // Network
     MINT_LISTEN_HOST: config?.network?.listen_host ?? '0.0.0.0',
@@ -99,11 +99,6 @@ export const main = sdk.setupMain(async ({ effects }) => {
         : ''
     }
 
-    // Fixup: if MINT_CLNREST_URL still has a non-HTTP scheme (e.g. clnrest://
-    // auto-injected by StartOS), replace it with http://
-    if (env['MINT_CLNREST_URL'] && !/^https?:\/\//.test(env['MINT_CLNREST_URL'])) {
-      env['MINT_CLNREST_URL'] = env['MINT_CLNREST_URL'].replace(/^[a-z]+:\/\//, 'http://')
-    }
   }
 
   return sdk.Daemons.of(effects).addDaemon('primary', {
@@ -120,14 +115,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       'primary',
     ),
     exec: {
-      command: [
-        'sh', '-c',
-        // Fix clnrest:// scheme auto-injected by StartOS — cashu needs http://
-        'if echo "$MINT_CLNREST_URL" | grep -q "^clnrest://"; then ' +
-          'export MINT_CLNREST_URL="http://${MINT_CLNREST_URL#clnrest://}"; ' +
-        'fi; ' +
-        'exec python3 -m cashu.mint',
-      ] as [string, ...string[]],
+      command: ['poetry', 'run', 'mint'],
       env,
     },
     ready: {
