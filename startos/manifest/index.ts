@@ -5,7 +5,7 @@ export const manifest = setupManifest({
   id: 'nutshell',
   title: 'Nutshell Cashu Mint',
   license: 'MIT',
-  packageRepo: 'https://github.com/cashubtc/nutshell',
+  packageRepo: 'https://github.com/mdubore/nutshell-startos',
   upstreamRepo: 'https://github.com/cashubtc/nutshell',
   marketingUrl: 'https://cashu.space',
   donationUrl: null,
