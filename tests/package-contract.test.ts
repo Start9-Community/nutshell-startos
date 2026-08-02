@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import {
@@ -65,6 +65,27 @@ test('exposes only the supported CLNRest backend and fixed internal network', as
   assert.doesNotMatch(configSource, /FakeWallet|LNbitsWallet/)
   assert.doesNotMatch(configSource, /listen_host|listen_port|protocol/)
   assert.doesNotMatch(actionsSource, /configure-network/)
+  assert.match(actionsSource, /configure-fees/)
   assert.match(interfacesSource, /bindPort\(MINT_PORT/)
   assert.match(interfacesSource, /protocol:\s*'http'/)
+})
+
+test('includes the Community Registry documentation and automation surface', async () => {
+  const requiredFiles = [
+    'README.md',
+    'UPDATING.md',
+    'AGENTS.md',
+    '.github/workflows/build.yml',
+    '.github/workflows/release.yml',
+    '.github/workflows/tagAndRelease.yml',
+    '.github/workflows/upstream-check.yml',
+  ]
+
+  await Promise.all(requiredFiles.map((path) => access(path)))
+
+  const readme = await readFile('README.md', 'utf8')
+  assert.doesNotMatch(readme, new RegExp(UPSTREAM_VERSION.replaceAll('.', '\\.')))
+  assert.match(readme, /## Image and Container Runtime/)
+  assert.match(readme, /## Actions \(StartOS UI\)/)
+  assert.match(readme, /## Quick Reference for AI Consumers/)
 })

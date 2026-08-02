@@ -1,23 +1,54 @@
-# Nutshell Cashu Mint
+# Getting Started
 
-Nutshell is an implementation of a Cashu mint and wallet. Cashu is a Chaumian Ecash system for Bitcoin.
+Nutshell runs a Cashu ecash mint backed by your Core Lightning service. The mint
+holds Bitcoin on behalf of ecash users, so protect its StartOS backup and treat
+its operator settings as production financial infrastructure.
 
-## Configuration
+## Before You Start
 
-### Mint Information
-- **Name**: A descriptive name for your sovereign mint.
-- **Description**: A short description of your mint.
+Install and start Core Lightning with CLNRest enabled. Nutshell discovers its
+internal address and restricted rune automatically; you do not need to copy
+credentials between services.
 
-### Lightning Backend
-- **Core Lightning (Internal RPC)**: Connects to the internal `c-lightning` service on your StartOS.
-- **Fake Wallet**: For testing purposes only. No real bitcoin is used.
-- **LNbits**: Connects to a remote LNbits instance.
+Create a StartOS backup before upgrading an existing mint. Upstream database
+migrations may prevent downgrading afterward.
 
-### Fees
-- **Fee Percentage**: The percentage fee for Lightning invoices (e.g., 0.01 for 1%).
-- **Minimum Fee Reserve**: The minimum satoshi fee reserve for outgoing payments.
+## Configure the Mint
 
-## Usage
+Use the service actions:
 
-Once the service is started, you can connect your Cashu wallet to the Mint API interface.
-The mint uses port 3338 by default.
+1. **Mint Info** — set a recognizable name, operator contacts, description,
+   icon, terms URL, and message of the day.
+2. **Lightning Fees** — set the percentage and minimum routing-fee reserve for
+   outgoing payments.
+3. **Advanced Settings** — review input fees, transaction limits, maximum
+   balance, rate limiting, and log level.
+4. Start the service and open **Mint Status** to confirm that the private key,
+   CLNRest backend, listener, and database are present.
+
+Restart Nutshell after changing configuration.
+
+## Connect a Wallet
+
+Copy an address from the **Cashu Mint API** interface and add it as a mint in a
+compatible Cashu wallet or service such as cashu.me. StartOS manages LAN, Tor,
+clearnet, tunnel, and TLS addresses; Nutshell itself speaks HTTP only on the
+isolated internal bridge.
+
+Test with a small mint and melt before accepting larger balances.
+
+## Backups
+
+The StartOS backup contains the SQLite database, mint seed, and configuration
+together. Losing the seed or restoring it without its matching database can
+make outstanding ecash unrecoverable. Keep multiple tested backups in secure
+locations.
+
+## Limitations
+
+This package supports Core Lightning through CLNRest and embedded SQLite. Other
+upstream Lightning backends, PostgreSQL, Redis caching, management RPC, and OIDC
+authentication are not exposed through StartOS.
+
+For Cashu protocol and Nutshell operational details, see the
+[upstream project](https://github.com/cashubtc/nutshell).

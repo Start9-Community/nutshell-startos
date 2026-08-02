@@ -177,7 +177,65 @@ const configureMintInfo = sdk.Action.withInput(
   },
 )
 
-// --- Action 1: Advanced Settings ---
+// --- Action 1: Lightning Fees ---
+
+const feesSpec = InputSpec.of({
+  fee_percent: Value.number({
+    name: 'Lightning Fee Reserve',
+    description:
+      'Percentage of each outgoing Lightning payment reserved for routing fees.',
+    warning: null,
+    default: 0,
+    required: true,
+    min: 0,
+    max: 100,
+    integer: false,
+    units: '%',
+    placeholder: '0',
+  }),
+  fee_reserve_min: Value.number({
+    name: 'Minimum Fee Reserve',
+    description:
+      'Minimum satoshi reserve added to outgoing Lightning payments.',
+    warning: null,
+    default: 100,
+    required: true,
+    min: 0,
+    max: null,
+    integer: true,
+    units: 'sats',
+    placeholder: '100',
+  }),
+})
+
+const configureFees = sdk.Action.withInput(
+  'configure-fees',
+
+  async () => ({
+    name: 'Lightning Fees',
+    description: 'Configure the routing-fee reserve for outgoing payments.',
+    warning: null,
+    allowedStatuses: 'any' as const,
+    group: 'Configuration',
+    visibility: 'enabled' as const,
+  }),
+
+  feesSpec,
+
+  async () => {
+    const config = await configYaml.read().once()
+    return {
+      fee_percent: config?.fees?.fee_percent ?? 0,
+      fee_reserve_min: config?.fees?.fee_reserve_min ?? 100,
+    }
+  },
+
+  async ({ effects, input }) => {
+    await configYaml.merge(effects, { fees: input })
+  },
+)
+
+// --- Action 2: Advanced Settings ---
 
 const advancedSpec = InputSpec.of({
   log_level: Value.select({
@@ -299,7 +357,7 @@ const configureAdvanced = sdk.Action.withInput(
   },
 )
 
-// --- Action 2: Mint Status ---
+// --- Action 3: Mint Status ---
 
 const showMintInfo = sdk.Action.withoutInput(
   'show-mint-info',
@@ -388,5 +446,6 @@ const showMintInfo = sdk.Action.withoutInput(
 
 export const actions = sdk.Actions.of()
   .addAction(configureMintInfo)
+  .addAction(configureFees)
   .addAction(configureAdvanced)
   .addAction(showMintInfo)

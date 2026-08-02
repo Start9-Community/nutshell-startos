@@ -9,7 +9,7 @@
     "prettier": "prettier --write startos tests",
     "test": "node --import tsx --test tests/**/*.test.ts"
   },
-  "author": "Start9 Labs",
+  "author": "mdubore",
   "license": "MIT",
   "dependencies": {
     "@start9labs/start-sdk": "2.0.9"
