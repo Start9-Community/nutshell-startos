@@ -1,8 +1,8 @@
-node_modules/
-javascript/
 *.s9pk
-dist/
-start-sdk
-start-os/
-image.tar
-start-os/
+startos/*.js
+node_modules/
+.DS_Store
+.vscode/
+docker-images
+javascript
+ncc-cache

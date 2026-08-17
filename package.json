@@ -1,26 +1,21 @@
 {
   "name": "nutshell-startos",
-  "private": true,
-  "description": "Nutshell Cashu Mint for StartOS",
-  "main": "javascript/index.js",
   "scripts": {
     "build": "rm -rf ./javascript && ncc build startos/index.ts -o ./javascript",
-    "check": "tsc --noEmit",
     "prettier": "prettier --write startos tests",
-    "test": "node --import tsx --test tests/**/*.test.ts",
+    "check": "tsc --noEmit",
+    "test": "node --test \"tests/**/*.test.ts\"",
     "test:smoke": "bash tests/smoke-nutshell.sh"
   },
-  "author": "mdubore",
-  "license": "MIT",
   "dependencies": {
-    "@start9labs/start-sdk": "2.0.9"
+    "@start9labs/start-sdk": "2.0.9",
+    "cln-startos": "github:Start9Labs/cln-startos#next"
   },
   "devDependencies": {
-    "@types/node": "22.19.0",
-    "@vercel/ncc": "0.38.4",
-    "prettier": "3.6.2",
-    "tsx": "4.23.4",
-    "typescript": "6.0.3"
+    "@types/node": "^22.19.0",
+    "@vercel/ncc": "^0.38.4",
+    "prettier": "^3.6.2",
+    "typescript": "^6.0.3"
   },
   "prettier": {
     "trailingComma": "all",

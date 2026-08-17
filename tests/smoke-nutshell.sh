@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-old_image="cashubtc/nutshell:0.19.2"
-new_image="$(node --import tsx --input-type=module -e "import { UPSTREAM_IMAGE_REFERENCE } from './startos/upstream.ts'; console.log(UPSTREAM_IMAGE_REFERENCE)")"
+# Migrates a database written by the previously packaged release into the one
+# the manifest now pins, and asserts the schema version moved. Override the
+# baseline when the packaged release changes:
+#   tests/smoke-nutshell.sh cashubtc/nutshell:0.20.3
+old_image="${1:-cashubtc/nutshell:0.19.2}"
+new_image="$(grep -o "cashubtc/nutshell:[^']*" startos/manifest/index.ts | head -1)"
+if [ -z "$new_image" ]; then
+  echo "Could not read the pinned image out of startos/manifest/index.ts" >&2
+  exit 1
+fi
 smoke_dir="$(mktemp -d /tmp/nutshell-migration-smoke.XXXXXX)"
-old_container="nutshell-smoke-old-$$"
-new_container="nutshell-smoke-new-$$"
+old_container="scratch-nutshell-smoke-old-$$"
+new_container="scratch-nutshell-smoke-new-$$"
 mint_key="1111111111111111111111111111111111111111111111111111111111111111"
 
 cleanup() {
