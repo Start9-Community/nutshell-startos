@@ -3,7 +3,7 @@ name: Tag and Release
 on:
   push:
     branches: ['main']
-    paths-ignore: ['*.md', 'docs/**']
+    paths-ignore: ['*.md']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -11,7 +11,6 @@ concurrency:
 
 jobs:
   tag:
-    if: github.repository_owner == 'Start9-Community'
     uses: Start9Labs/start-technologies/.github/workflows/tagAndRelease.yml@master
     with:
       REFERENCE_REGISTRY: ${{ vars.REFERENCE_REGISTRY }}

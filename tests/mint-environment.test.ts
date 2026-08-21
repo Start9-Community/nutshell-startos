@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildMintEnvironment } from '../startos/config/mintEnvironment'
+import { buildMintEnvironment } from '../startos/mintEnvironment.ts'
+
+/**
+ * Run with `npm test` (plain `node --test` — Node 22 strips the types, so this
+ * needs no test framework and no devDependencies).
+ *
+ * The environment mapping is where an upstream variable rename lands silently:
+ * a wrong name is not a type error and the mint starts anyway, on defaults.
+ * `UPDATING.md` lists it as one of the things to re-check on every bump.
+ */
+
+const clnrest = { address: '10.0.3.1:3010', rune: 'restricted-rune' }
 
 const config = {
   mint_info: {
@@ -32,10 +43,7 @@ const config = {
 }
 
 test('builds a fixed CLNRest environment for StartOS', () => {
-  const env = buildMintEnvironment(config, 'private-key', {
-    address: '10.0.3.1:3010',
-    rune: 'restricted-rune',
-  })
+  const env = buildMintEnvironment(config, 'private-key', clnrest)
 
   assert.equal(env.MINT_DATABASE, '/data/mint')
   assert.equal(env.MINT_LISTEN_HOST, '0.0.0.0')
@@ -47,7 +55,7 @@ test('builds a fixed CLNRest environment for StartOS', () => {
 })
 
 test('maps operator settings to current Nutshell environment variables', () => {
-  const env = buildMintEnvironment(config, 'private-key', null)
+  const env = buildMintEnvironment(config, 'private-key', clnrest)
 
   assert.equal(env.MINT_INFO_NAME, 'Sovereign Mint')
   assert.equal(
@@ -87,7 +95,7 @@ test('omits optional values and deprecated variable names', () => {
       },
     },
     'private-key',
-    null,
+    clnrest,
   )
 
   assert.equal(env.MINT_INFO_CONTACT, undefined)
@@ -102,7 +110,7 @@ test('omits optional values and deprecated variable names', () => {
 })
 
 test('keeps upstream rate limiting enabled when no preference is stored', () => {
-  const env = buildMintEnvironment(null, 'private-key', null)
+  const env = buildMintEnvironment(null, 'private-key', clnrest)
 
   assert.equal(env.MINT_RATE_LIMIT, 'true')
   assert.equal(env.MINT_GLOBAL_RATE_LIMIT_PER_MINUTE, '60')
