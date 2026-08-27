@@ -1,12 +1,10 @@
 import type { LightningBackend } from './lightningBackend'
+import { lndRestRuntime } from './lndRestRuntime.mjs'
+
+export { lndRestRuntime } from './lndRestRuntime.mjs'
 
 export const probeHttpTimeoutSeconds = 5
 export const probeExecTimeoutMs = 15_000
-
-export const lndRestRuntime = {
-  rootCaPath: '/tmp/startos-root-ca.pem',
-  macaroon: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
-} as const
 
 const clnProbeScript = `
 import os

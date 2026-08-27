@@ -1,15 +1,17 @@
 /**
  * Pure mapping from the operator's settings to Nutshell's environment.
  *
- * Deliberately import-free so `tests/mint-environment.test.ts` runs under plain
- * `node --test` without the SDK: Node's resolver needs full specifiers, so any
- * relative import here would break the test rather than the build.
+ * Deliberately SDK-free so `tests/mint-environment.test.ts` runs under plain
+ * `node --test`. The one runtime import uses an actual `.mjs` module so both
+ * Node and the package bundler resolve the same fixed LND credential paths.
  *
  * That costs a hand-written config type, which `config.yaml.ts` would otherwise
  * own. The fields below are therefore **required**, not optional — that is what
  * makes a rename in the zod shape a compile error at the `main.ts` call site
  * instead of a silently-defaulted environment variable.
  */
+import { lndRestRuntime } from './lndRestRuntime.mjs'
+
 export type MintEnvironmentConfig = {
   mint_info: {
     name: string
@@ -38,7 +40,7 @@ export type MintEnvironmentConfig = {
   }
 }
 
-export type LightningConnection =
+export type MintLightningConnection =
   | {
       backend: 'clnrest'
       address: string
@@ -47,8 +49,6 @@ export type LightningConnection =
   | {
       backend: 'lndrest'
       address: string
-      rootCaPath: string
-      macaroonPath: string
     }
 
 /** Nutshell's internal HTTP listener. StartOS owns external addressing. */
@@ -61,7 +61,7 @@ export const MINT_DATABASE = '/data/mint'
 export const buildMintEnvironment = (
   config: MintEnvironmentConfig | null,
   seed: string,
-  lightning: LightningConnection,
+  lightning: MintLightningConnection,
 ): Record<string, string> => {
   const mintInfo = config?.mint_info
   const fees = config?.fees
@@ -97,8 +97,8 @@ export const buildMintEnvironment = (
     case 'lndrest':
       env.MINT_BACKEND_BOLT11_SAT = 'LndRestWallet'
       env.MINT_LND_REST_ENDPOINT = `https://${lightning.address}`
-      env.MINT_LND_REST_CERT = lightning.rootCaPath
-      env.MINT_LND_REST_MACAROON = lightning.macaroonPath
+      env.MINT_LND_REST_CERT = lndRestRuntime.rootCaPath
+      env.MINT_LND_REST_MACAROON = lndRestRuntime.macaroon
       env.MINT_LND_REST_CERT_VERIFY = 'true'
       break
     default:
