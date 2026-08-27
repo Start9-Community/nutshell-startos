@@ -2,8 +2,18 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   assertLightningBackend,
+  backupVolumeIds,
+  legacyLightningBackend,
   lockLightningBackend,
 } from '../startos/lightningBackend.ts'
+
+test('migrates every legacy installation to locked CLN', () => {
+  assert.equal(legacyLightningBackend(), 'clnrest')
+})
+
+test('backs up mint data and wrapper selection state', () => {
+  assert.deepEqual(backupVolumeIds, ['main', 'startos'])
+})
 
 test('locks an unselected mint to CLN', () => {
   assert.deepEqual(lockLightningBackend(undefined, 'clnrest'), {
