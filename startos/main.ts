@@ -40,6 +40,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
       (host) =>
         host?.bindings[clnrestPort]?.interfaces[clnrestInterfaceId]?.addressInfo
           .suffix ?? null,
+      // cln drops the interface while Revoke Runes mints a replacement, so an
+      // absent suffix is a gap, not a removal. A CLNRest that is really gone
+      // takes its binding with it, which the address read above already throws
+      // on.
+      (prev, next) => next === null || prev === next,
     )
     .const()
   const rune = clnrestSuffix?.match(/[?&]rune=([^&]*)/)?.[1]
