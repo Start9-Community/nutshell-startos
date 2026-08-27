@@ -67,15 +67,45 @@ export function lockLightningBackend(
   return { lightningBackend: requested }
 }
 
-export async function validateThenLock(
+type ValidateThenLock = (
   current: LightningBackend | null | undefined,
   requested: LightningBackend,
   validate: (backend: LightningBackend) => Promise<unknown>,
   persist: (state: { lightningBackend: LightningBackend }) => Promise<unknown>,
   readCurrent: () => Promise<LightningBackend | null | undefined>,
-) {
-  const state = lockLightningBackend(current, requested)
-  await validate(requested)
-  lockLightningBackend(await readCurrent(), requested)
-  await persist(state)
+) => Promise<void>
+
+function createAsyncMutex() {
+  let tail = Promise.resolve()
+
+  return async function withLock<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = tail
+    let release!: () => void
+    tail = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    await previous
+    try {
+      return await fn()
+    } finally {
+      release()
+    }
+  }
 }
+
+export function createValidateThenLock(): ValidateThenLock {
+  const withFinalCommitLock = createAsyncMutex()
+
+  return async (current, requested, validate, persist, readCurrent) => {
+    const state = lockLightningBackend(current, requested)
+    await validate(requested)
+
+    await withFinalCommitLock(async () => {
+      lockLightningBackend(await readCurrent(), requested)
+      await persist(state)
+    })
+  }
+}
+
+export const validateThenLock = createValidateThenLock()

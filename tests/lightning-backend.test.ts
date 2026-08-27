@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   assertLightningBackend,
+  createValidateThenLock,
   dependencyForBackend,
   dependenciesForBackendState,
   legacyLightningBackend,
@@ -225,4 +226,88 @@ test('does not overwrite a selection committed during validation', async () => {
   )
 
   assert.equal(persistCalls, 0)
+})
+
+test('serializes the final re-read and commit for concurrent selections', async () => {
+  const select = createValidateThenLock()
+  let stored: 'clnrest' | 'lndrest' | undefined
+  let validations = 0
+  let releaseValidations!: () => void
+  const validationsReady = new Promise<void>((resolve) => {
+    releaseValidations = resolve
+  })
+  let persistCalls = 0
+  let releaseFirstPersist!: () => void
+  const holdFirstPersist = new Promise<void>((resolve) => {
+    releaseFirstPersist = resolve
+  })
+  let signalFirstPersist!: () => void
+  const firstPersistStarted = new Promise<void>((resolve) => {
+    signalFirstPersist = resolve
+  })
+
+  const validate = async () => {
+    validations += 1
+    if (validations === 2) releaseValidations()
+    await validationsReady
+  }
+  const persist = async (state: {
+    lightningBackend: 'clnrest' | 'lndrest'
+  }) => {
+    persistCalls += 1
+    if (persistCalls === 1) {
+      signalFirstPersist()
+      await holdFirstPersist
+    }
+    stored = state.lightningBackend
+  }
+  const readCurrent = async () => stored
+
+  const selections = [
+    select(undefined, 'clnrest', validate, persist, readCurrent),
+    select(undefined, 'lndrest', validate, persist, readCurrent),
+  ]
+  await firstPersistStarted
+  releaseFirstPersist()
+  const results = await Promise.allSettled(selections)
+
+  assert.equal(
+    results.filter((result) => result.status === 'fulfilled').length,
+    1,
+  )
+  const rejected = results.find((result) => result.status === 'rejected')
+  assert.ok(rejected && rejected.status === 'rejected')
+  assert.match(String(rejected.reason), /already locked/i)
+  assert.equal(persistCalls, 1)
+  assert.ok(stored === 'clnrest' || stored === 'lndrest')
+})
+
+test('releases the final commit mutex when persistence fails', async () => {
+  const select = createValidateThenLock()
+  let stored: 'clnrest' | 'lndrest' | undefined
+
+  await assert.rejects(
+    select(
+      undefined,
+      'clnrest',
+      async () => {},
+      async () => {
+        throw new Error('write failed')
+      },
+      async () => stored,
+    ),
+    /write failed/,
+  )
+
+  await select(
+    undefined,
+    'lndrest',
+    async () => {},
+    async (state) => {
+      stored = state.lightningBackend
+    },
+    async () => stored,
+  )
+
+  assert.equal(stored, 'lndrest')
 })

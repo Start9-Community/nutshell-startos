@@ -3,23 +3,27 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   buildProbeSpec,
-  lndCredentialPaths,
+  lndRestRuntime,
   probeExecTimeoutMs,
   probeHttpTimeoutSeconds,
   probeRuntimeForBackend,
+  selectStartOsRootCa,
 } from '../startos/lightningProbe.ts'
 
-test('CLN probe authenticates without putting the rune in argv', () => {
+test('CLN probe authenticates without putting the rune in argv or env', () => {
   const spec = buildProbeSpec('clnrest', {
     endpoint: 'http://10.0.3.1:3010',
     credential: 'secret-rune',
   })
 
   assert.match(spec.env.PROBE_URL, /^http:/)
-  assert.equal(spec.env.PROBE_CREDENTIAL, 'secret-rune')
   assert.equal(spec.command.join(' ').includes('secret-rune'), false)
+  assert.equal(Object.values(spec.env).includes('secret-rune'), false)
+  assert.equal('PROBE_CREDENTIAL' in spec.env, false)
+  assert.equal(spec.input, 'secret-rune')
   assert.match(spec.command.at(-1) ?? '', /\/v1\/listfunds/)
   assert.match(spec.command.at(-1) ?? '', /method=['"]POST['"]/)
+  assert.match(spec.command.at(-1) ?? '', /sys\.stdin\.read\(\)/)
 })
 
 test('LND probe enables verification and uses mounted credentials', () => {
@@ -28,7 +32,7 @@ test('LND probe enables verification and uses mounted credentials', () => {
   })
 
   assert.equal(spec.env.PROBE_CERT_VERIFY, 'true')
-  assert.equal(spec.env.PROBE_CERT, '/mnt/lnd/tls.cert')
+  assert.equal(spec.env.PROBE_CERT, '/tmp/startos-root-ca.pem')
   assert.equal(
     spec.env.PROBE_CREDENTIAL,
     '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
@@ -52,7 +56,7 @@ test('probe scripts use fixed client and exec timeouts', () => {
   assert.match(lnd.command.at(-1) ?? '', /timeout=5/)
 })
 
-test('only LND receives the exact read-only dependency mount', () => {
+test('only LND receives the exact read-only macaroon mount and proxy trust', () => {
   assert.deepEqual(probeRuntimeForBackend('clnrest'), { mounts: [] })
   assert.deepEqual(probeRuntimeForBackend('lndrest'), {
     mounts: [
@@ -64,11 +68,25 @@ test('only LND receives the exact read-only dependency mount', () => {
         readonly: true,
       },
     ],
+    tls: {
+      source: 'startos-root-ca',
+      rootCaPath: '/tmp/startos-root-ca.pem',
+      verify: true,
+    },
   })
-  assert.deepEqual(lndCredentialPaths, {
-    certificate: '/mnt/lnd/tls.cert',
+  assert.deepEqual(lndRestRuntime, {
+    rootCaPath: '/tmp/startos-root-ca.pem',
     macaroon: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
   })
+})
+
+test('selects only a nonempty StartOS root CA from the certificate chain', () => {
+  assert.equal(
+    selectStartOsRootCa(['leaf', 'intermediate', 'root-ca']),
+    'root-ca',
+  )
+  assert.throws(() => selectStartOsRootCa([]), /root CA/i)
+  assert.throws(() => selectStartOsRootCa(['leaf', '  ']), /root CA/i)
 })
 
 test('SDK probe wiring consumes the pure runtime contract', () => {
@@ -79,6 +97,9 @@ test('SDK probe wiring consumes the pure runtime contract', () => {
 
   assert.match(source, /probeRuntimeForBackend\(backend\)/)
   assert.match(source, /sdk\.SubContainer\.withTemp\(/)
+  assert.match(source, /sdk\.getSslCertificate\(effects, \[\]\)\.once\(\)/)
+  assert.match(source, /subcontainer\.writeFile\(/)
+  assert.match(source, /input: spec\.input/)
   assert.match(source, /probeExecTimeoutMs/)
 })
 

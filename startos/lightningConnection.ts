@@ -6,8 +6,10 @@ import { i18n } from './i18n'
 import { LightningBackend } from './lightningBackend'
 import {
   buildProbeSpec,
+  lndRestRuntime,
   probeExecTimeoutMs,
   probeRuntimeForBackend,
+  selectStartOsRootCa,
 } from './lightningProbe'
 import { sdk } from './sdk'
 import { clnrestHostId, clnrestInterfaceId } from './utils'
@@ -114,14 +116,26 @@ async function runLightningProbe(
     connection.backend === 'clnrest'
       ? buildProbeSpec('clnrest', connection)
       : buildProbeSpec('lndrest', connection)
+  const rootCa =
+    backend === 'lndrest'
+      ? selectStartOsRootCa(await sdk.getSslCertificate(effects, []).once())
+      : null
 
   const result = await sdk.SubContainer.withTemp(
     effects,
     { imageId: 'main' },
     probeMounts(backend),
     `validate-${backend}`,
-    (subcontainer) =>
-      subcontainer.exec(spec.command, { env: spec.env }, probeExecTimeoutMs),
+    async (subcontainer) => {
+      if (rootCa !== null) {
+        await subcontainer.writeFile(lndRestRuntime.rootCaPath, rootCa)
+      }
+      return subcontainer.exec(
+        spec.command,
+        { env: spec.env, input: spec.input },
+        probeExecTimeoutMs,
+      )
+    },
   )
 
   if (result.exitCode !== 0) {

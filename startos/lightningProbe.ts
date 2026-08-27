@@ -3,21 +3,23 @@ import type { LightningBackend } from './lightningBackend'
 export const probeHttpTimeoutSeconds = 5
 export const probeExecTimeoutMs = 15_000
 
-export const lndCredentialPaths = {
-  certificate: '/mnt/lnd/tls.cert',
+export const lndRestRuntime = {
+  rootCaPath: '/tmp/startos-root-ca.pem',
   macaroon: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
 } as const
 
 const clnProbeScript = `
 import os
+import sys
 import urllib.request
 
+credential = sys.stdin.read()
 request = urllib.request.Request(
     os.environ["PROBE_URL"] + "/v1/listfunds",
     data=b"{}",
     headers={
         "Content-Type": "application/json",
-        "rune": os.environ["PROBE_CREDENTIAL"],
+        "rune": credential,
     },
     method="POST",
 )
@@ -56,6 +58,7 @@ type LndProbeOptions = {
 export type ProbeSpec = {
   command: string[]
   env: Record<string, string>
+  input?: string
 }
 
 export function buildProbeSpec(
@@ -78,8 +81,8 @@ export function buildProbeSpec(
       command: ['poetry', 'run', 'python', '-c', clnProbeScript],
       env: {
         PROBE_URL: options.endpoint,
-        PROBE_CREDENTIAL: options.credential,
       },
+      input: options.credential,
     }
   }
 
@@ -88,8 +91,8 @@ export function buildProbeSpec(
     env: {
       PROBE_URL: options.endpoint,
       PROBE_CERT_VERIFY: 'true',
-      PROBE_CERT: lndCredentialPaths.certificate,
-      PROBE_CREDENTIAL: lndCredentialPaths.macaroon,
+      PROBE_CERT: lndRestRuntime.rootCaPath,
+      PROBE_CREDENTIAL: lndRestRuntime.macaroon,
     },
   }
 }
@@ -105,5 +108,20 @@ const lndProbeMount = {
 export function probeRuntimeForBackend(backend: LightningBackend) {
   return backend === 'clnrest'
     ? ({ mounts: [] } as const)
-    : ({ mounts: [lndProbeMount] } as const)
+    : ({
+        mounts: [lndProbeMount],
+        tls: {
+          source: 'startos-root-ca',
+          rootCaPath: lndRestRuntime.rootCaPath,
+          verify: true,
+        },
+      } as const)
+}
+
+export function selectStartOsRootCa(chain: readonly string[]) {
+  const rootCa = chain.at(-1)?.trim()
+  if (!rootCa) {
+    throw new Error('StartOS root CA is unavailable')
+  }
+  return rootCa
 }
