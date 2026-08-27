@@ -26,7 +26,7 @@ test('CLN probe authenticates without putting the rune in argv or env', () => {
   assert.match(spec.command.at(-1) ?? '', /sys\.stdin\.read\(\)/)
 })
 
-test('LND probe enables verification and uses mounted credentials', () => {
+test('LND probe enables verification and uses an ephemeral credential file', () => {
   const spec = buildProbeSpec('lndrest', {
     endpoint: 'https://10.0.3.1:8080',
   })
@@ -56,19 +56,22 @@ test('probe scripts use fixed client and exec timeouts', () => {
   assert.match(lnd.command.at(-1) ?? '', /timeout=5/)
 })
 
-test('only LND receives the exact read-only macaroon mount and proxy trust', () => {
+test('probe builder rejects backends outside the exact runtime allowlist', () => {
+  assert.throws(
+    () =>
+      buildProbeSpec(
+        // @ts-expect-error Exercise corrupt input at the JavaScript boundary.
+        'fake',
+        { endpoint: 'https://10.0.3.1:8080' },
+      ),
+    /invalid/i,
+  )
+})
+
+test('neither backend receives a dependency mount and only LND gets proxy trust', () => {
   assert.deepEqual(probeRuntimeForBackend('clnrest'), { mounts: [] })
   assert.deepEqual(probeRuntimeForBackend('lndrest'), {
-    mounts: [
-      {
-        dependencyId: 'lnd',
-        volumeId: 'main',
-        subpath: 'data/chain/bitcoin/mainnet/admin.macaroon',
-        mountpoint: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
-        type: 'file',
-        readonly: true,
-      },
-    ],
+    mounts: [],
     tls: {
       source: 'startos-root-ca',
       rootCaPath: '/tmp/startos-root-ca.pem',
@@ -96,10 +99,11 @@ test('SDK probe wiring consumes the pure runtime contract', () => {
     'utf8',
   )
 
-  assert.match(source, /probeRuntimeForBackend\(backend\)/)
+  assert.match(source, /selectedRuntimeForConnection\(backend, connection\)/)
   assert.match(source, /sdk\.SubContainer\.withTemp\(/)
   assert.match(source, /sdk\.getSslCertificate\(effects, \[\]\)\.once\(\)/)
   assert.match(source, /subcontainer\.writeFile\(/)
+  assert.doesNotMatch(source, /mountDependency/)
   assert.match(source, /input: spec\.input/)
   assert.match(source, /probeExecTimeoutMs/)
 })

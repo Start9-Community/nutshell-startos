@@ -94,15 +94,84 @@ test('selected connection resolution applies its requested read mode', () => {
   const clnReads = callsNamed(cln, 'readConnectionValue')
   const lndReads = callsNamed(lnd, 'readConnectionValue')
   assert.equal(clnReads.length, 2)
-  assert.equal(lndReads.length, 1)
+  assert.equal(lndReads.length, 2)
   for (const read of [...clnReads, ...lndReads]) {
     assert.equal(read.arguments[1]?.getText(source), 'readMode')
   }
+
+  assert.equal(
+    descendants(
+      lnd,
+      (node): node is ts.Identifier =>
+        ts.isIdentifier(node) && node.text === 'lndconnectRestId',
+    ).length,
+    1,
+  )
+  assert.equal(callsNamed(lnd, 'parseLndRestMacaroonSuffix').length, 1)
 
   const modeParameter = selected.parameters.find(
     (parameter) => parameter.name.getText(source) === 'readMode',
   )
   assert.equal(modeParameter?.initializer?.getText(source), "'one-shot'")
+})
+
+test('validation uses no dependency mount and prepares credentials before probing', () => {
+  const source = parse('../startos/lightningConnection.ts')
+  const functions = descendants(
+    source,
+    (node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node),
+  )
+  const probe = functions.find((fn) => fn.name?.text === 'runLightningProbe')
+  assert.ok(probe)
+
+  assert.equal(callsNamed(probe, 'mountDependency').length, 0)
+  const temporaryContainers = callsNamed(probe, 'withTemp')
+  assert.equal(temporaryContainers.length, 1)
+  assert.equal(
+    temporaryContainers[0].arguments[2]?.getText(source),
+    'sdk.Mounts.of()',
+  )
+
+  const prepareCalls = callsNamed(probe, 'prepareRuntimeCredentials')
+  assert.equal(prepareCalls.length, 1)
+  const directoryPreparation = callsNamed(prepareCalls[0], 'execFail').filter(
+    (call) => {
+      const argument = call.arguments[0]
+      return (
+        argument &&
+        ts.isArrayLiteralExpression(argument) &&
+        argument.elements[0]?.getText(source) === "'mkdir'"
+      )
+    },
+  )
+  assert.equal(directoryPreparation.length, 1)
+  assert.deepEqual(
+    (
+      directoryPreparation[0].arguments[0] as ts.ArrayLiteralExpression
+    ).elements.map((element) => element.getText(source)),
+    ["'mkdir'", "'-p'", 'path'],
+  )
+
+  const credentialChecks = callsNamed(prepareCalls[0], 'execFail').filter(
+    (call) => {
+      const argument = call.arguments[0]
+      return (
+        argument &&
+        ts.isArrayLiteralExpression(argument) &&
+        argument.elements[0]?.getText(source) === "'test'"
+      )
+    },
+  )
+  assert.equal(credentialChecks.length, 1)
+  assert.deepEqual(
+    credentialChecks[0].arguments[0] &&
+      ts.isArrayLiteralExpression(credentialChecks[0].arguments[0])
+      ? credentialChecks[0].arguments[0].elements.map((element) =>
+          element.getText(source),
+        )
+      : null,
+    ["'test'", "'-s'", 'path'],
+  )
 })
 
 test('main consumes the selected mount and connection contracts', () => {
@@ -124,8 +193,7 @@ test('main consumes the selected mount and connection contracts', () => {
   assert.equal(volumeCalls[0].arguments[0]?.getText(source), 'policy.main')
 
   const dependencyCalls = callsNamed(source, 'mountDependency')
-  assert.equal(dependencyCalls.length, 1)
-  assert.equal(dependencyCalls[0].arguments[0]?.getText(source), 'dependency')
+  assert.equal(dependencyCalls.length, 0)
 })
 
 test('main prepares LND trust and credentials in the daemon subcontainer', () => {
@@ -156,7 +224,34 @@ test('main prepares LND trust and credentials in the daemon subcontainer', () =>
     'subcontainer',
   )
 
-  const credentialChecks = callsNamed(prepareCalls[0], 'execFail')
+  const directoryPreparation = callsNamed(prepareCalls[0], 'execFail').filter(
+    (call) => {
+      const argument = call.arguments[0]
+      return (
+        argument &&
+        ts.isArrayLiteralExpression(argument) &&
+        argument.elements[0]?.getText(source) === "'mkdir'"
+      )
+    },
+  )
+  assert.equal(directoryPreparation.length, 1)
+  assert.deepEqual(
+    (
+      directoryPreparation[0].arguments[0] as ts.ArrayLiteralExpression
+    ).elements.map((element) => element.getText(source)),
+    ["'mkdir'", "'-p'", 'path'],
+  )
+
+  const credentialChecks = callsNamed(prepareCalls[0], 'execFail').filter(
+    (call) => {
+      const argument = call.arguments[0]
+      return (
+        argument &&
+        ts.isArrayLiteralExpression(argument) &&
+        argument.elements[0]?.getText(source) === "'test'"
+      )
+    },
+  )
   assert.equal(credentialChecks.length, 1)
   assert.equal(
     (

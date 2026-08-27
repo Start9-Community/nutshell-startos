@@ -1,7 +1,10 @@
 import { T } from '@start9labs/start-sdk'
 import { clnrestPort } from 'cln-startos/startos/utils'
-import { controlHostId, restPort } from 'lnd-startos/startos/interfaces'
-import type { manifest as lndManifest } from 'lnd-startos/startos/manifest'
+import {
+  controlHostId,
+  lndconnectRestId,
+  restPort,
+} from 'lnd-startos/startos/interfaces'
 import { i18n } from './i18n'
 import {
   assertLightningBackend,
@@ -9,21 +12,22 @@ import {
 } from './lightningBackend'
 import {
   buildProbeSpec,
-  lndRestRuntime,
   probeExecTimeoutMs,
-  probeRuntimeForBackend,
   selectStartOsRootCa,
 } from './lightningProbe'
 import {
   type ConnectionReadMode,
   endpointForConnection,
+  parseLndRestMacaroonSuffix,
+  prepareRuntimeCredentials,
   readConnectionValue,
+  type ResolvedLightningConnection,
+  selectedRuntimeForConnection,
 } from './lightningRuntime'
-import type { MintLightningConnection } from './mintEnvironment'
 import { sdk } from './sdk'
 import { clnrestHostId, clnrestInterfaceId } from './utils'
 
-export type LightningConnection = MintLightningConnection
+export type LightningConnection = ResolvedLightningConnection
 
 async function resolveClnConnection(
   effects: T.Effects,
@@ -90,9 +94,21 @@ async function resolveLndConnection(
     throw new Error('Selected LND REST address is unavailable')
   }
 
+  const suffix = await readConnectionValue(
+    sdk.host.get(
+      effects,
+      { packageId: 'lnd', hostId: controlHostId },
+      (host) =>
+        host?.bindings[restPort]?.interfaces[lndconnectRestId]?.addressInfo
+          .suffix ?? null,
+    ),
+    readMode,
+  )
+
   return {
     backend: 'lndrest',
     address,
+    macaroon: parseLndRestMacaroonSuffix(suffix),
   }
 }
 
@@ -110,18 +126,12 @@ export function resolveLightningConnection(
   }
 }
 
-function probeMounts(backend: LightningBackend) {
-  const runtime = probeRuntimeForBackend(backend)
-  if (runtime.mounts.length === 0) return sdk.Mounts.of()
-
-  return sdk.Mounts.of().mountDependency<typeof lndManifest>(runtime.mounts[0])
-}
-
 async function runLightningProbe(
   effects: T.Effects,
   connection: LightningConnection,
 ) {
   const backend = connection.backend
+  const runtime = selectedRuntimeForConnection(backend, connection)
   const spec =
     connection.backend === 'clnrest'
       ? buildProbeSpec('clnrest', {
@@ -139,12 +149,19 @@ async function runLightningProbe(
   const result = await sdk.SubContainer.withTemp(
     effects,
     { imageId: 'main' },
-    probeMounts(backend),
+    sdk.Mounts.of(),
     `validate-${backend}`,
     async (subcontainer) => {
-      if (rootCa !== null) {
-        await subcontainer.writeFile(lndRestRuntime.rootCaPath, rootCa)
-      }
+      await prepareRuntimeCredentials(runtime, rootCa, {
+        ensureDirectory: async (path) => {
+          await subcontainer.execFail(['mkdir', '-p', path])
+        },
+        writeFile: (path, contents) =>
+          subcontainer.writeFile(path, contents, { mode: 0o600 }),
+        requireNonemptyFile: async (path) => {
+          await subcontainer.execFail(['test', '-s', path])
+        },
+      })
       return subcontainer.exec(
         spec.command,
         { env: spec.env, input: spec.input },

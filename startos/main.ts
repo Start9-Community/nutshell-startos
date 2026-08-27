@@ -1,4 +1,3 @@
-import type { manifest as lndManifest } from 'lnd-startos/startos/manifest'
 import { configYaml } from './fileModels/config.yaml'
 import { storeJson } from './fileModels/store.json'
 import { i18n } from './i18n'
@@ -18,11 +17,7 @@ import { mintSeedFile } from './utils'
 type MintMountPolicy = ReturnType<typeof mountPolicyForBackend>
 
 function buildMintMounts(policy: MintMountPolicy) {
-  let mounts = sdk.Mounts.of().mountVolume(policy.main)
-  for (const dependency of policy.dependencies) {
-    mounts = mounts.mountDependency<typeof lndManifest>(dependency)
-  }
-  return mounts
+  return sdk.Mounts.of().mountVolume(policy.main)
 }
 
 export const main = sdk.setupMain(async ({ effects }) => {
@@ -54,7 +49,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
   await prepareSubcontainerOrDestroy(
     () =>
       prepareRuntimeCredentials(runtime, rootCa, {
-        writeFile: (path, contents) => subcontainer.writeFile(path, contents),
+        ensureDirectory: async (path) => {
+          await subcontainer.execFail(['mkdir', '-p', path])
+        },
+        writeFile: (path, contents) =>
+          subcontainer.writeFile(path, contents, { mode: 0o600 }),
         requireNonemptyFile: async (path) => {
           try {
             await subcontainer.execFail(['test', '-s', path])

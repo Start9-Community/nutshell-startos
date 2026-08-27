@@ -1,5 +1,8 @@
-import type { LightningBackend } from './lightningBackend'
-import { lndDependencyMount, lndRestRuntime } from './lndRestRuntime.mjs'
+import {
+  assertLightningBackend,
+  type LightningBackend,
+} from './lightningBackendState.mjs'
+import { lndRestRuntime } from './lndRestRuntime.mjs'
 
 export { lndRestRuntime } from './lndRestRuntime.mjs'
 
@@ -71,41 +74,48 @@ export function buildProbeSpec(
   backend: LightningBackend,
   options: ClnProbeOptions | LndProbeOptions,
 ): ProbeSpec {
-  if (backend === 'clnrest') {
-    if (!('credential' in options)) {
-      throw new Error('CLNRest probe credential is missing')
-    }
-    return {
-      command: ['poetry', 'run', 'python', '-c', clnProbeScript],
-      env: {
-        PROBE_URL: options.endpoint,
-      },
-      input: options.credential,
-    }
-  }
+  assertLightningBackend(backend)
+  switch (backend) {
+    case 'clnrest':
+      if (!('credential' in options)) {
+        throw new Error('CLNRest probe credential is missing')
+      }
+      return {
+        command: ['poetry', 'run', 'python', '-c', clnProbeScript],
+        env: {
+          PROBE_URL: options.endpoint,
+        },
+        input: options.credential,
+      }
 
-  return {
-    command: ['poetry', 'run', 'python', '-c', lndProbeScript],
-    env: {
-      PROBE_URL: options.endpoint,
-      PROBE_CERT_VERIFY: 'true',
-      PROBE_CERT: lndRestRuntime.rootCaPath,
-      PROBE_CREDENTIAL: lndRestRuntime.macaroon,
-    },
+    case 'lndrest':
+      return {
+        command: ['poetry', 'run', 'python', '-c', lndProbeScript],
+        env: {
+          PROBE_URL: options.endpoint,
+          PROBE_CERT_VERIFY: 'true',
+          PROBE_CERT: lndRestRuntime.rootCaPath,
+          PROBE_CREDENTIAL: lndRestRuntime.macaroon,
+        },
+      }
   }
 }
 
 export function probeRuntimeForBackend(backend: LightningBackend) {
-  return backend === 'clnrest'
-    ? ({ mounts: [] } as const)
-    : ({
-        mounts: [lndDependencyMount],
+  assertLightningBackend(backend)
+  switch (backend) {
+    case 'clnrest':
+      return { mounts: [] } as const
+    case 'lndrest':
+      return {
+        mounts: [],
         tls: {
           source: 'startos-root-ca',
           rootCaPath: lndRestRuntime.rootCaPath,
           verify: true,
         },
-      } as const)
+      } as const
+  }
 }
 
 export function selectStartOsRootCa(chain: readonly string[]) {

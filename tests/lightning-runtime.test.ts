@@ -5,6 +5,7 @@ import {
   backendDisplayName,
   endpointForConnection,
   mountPolicyForBackend,
+  parseLndRestMacaroonSuffix,
   prepareRuntimeCredentials,
   prepareSubcontainerOrDestroy,
   readConnectionValue,
@@ -29,7 +30,7 @@ test('mounts only the writable mint volume for CLN', () => {
   })
 })
 
-test('mounts only the read-only LND admin macaroon file for LND', () => {
+test('mounts no LND dependency volume for LND', () => {
   assert.deepEqual(mountPolicyForBackend('lndrest'), {
     main: {
       volumeId: 'main',
@@ -37,17 +38,29 @@ test('mounts only the read-only LND admin macaroon file for LND', () => {
       mountpoint: '/data',
       readonly: false,
     },
-    dependencies: [
-      {
-        dependencyId: 'lnd',
-        volumeId: 'main',
-        subpath: 'data/chain/bitcoin/mainnet/admin.macaroon',
-        mountpoint: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
-        type: 'file',
-        readonly: true,
-      },
-    ],
+    dependencies: [],
   })
+})
+
+test('decodes one canonical base64url macaroon from the LND interface suffix', () => {
+  assert.deepEqual(
+    parseLndRestMacaroonSuffix('?other=value&macaroon=AQID'),
+    Buffer.from([1, 2, 3]),
+  )
+})
+
+test('rejects missing, duplicate, empty, or invalid LND macaroon suffixes', () => {
+  for (const suffix of [
+    null,
+    '',
+    '?other=value',
+    '?macaroon=',
+    '?macaroon=A',
+    '?macaroon=%%%',
+    '?macaroon=AQID&macaroon=BAUG',
+  ]) {
+    assert.throws(() => parseLndRestMacaroonSuffix(suffix), /macaroon/i)
+  }
 })
 
 test('fails closed before building mounts for missing or invalid state', () => {
@@ -70,6 +83,7 @@ test('resolves only the selected LND connection and keeps its address raw', asyn
     return {
       backend: 'lndrest',
       address: '10.0.3.1:8080',
+      macaroon: Buffer.from([1, 2, 3]),
     }
   })
 
@@ -78,11 +92,13 @@ test('resolves only the selected LND connection and keeps its address raw', asyn
     backend: 'lndrest',
     address: '10.0.3.1:8080',
   })
+  assert.deepEqual(runtime.lndMacaroon, Buffer.from([1, 2, 3]))
+  assert.equal('macaroon' in runtime.connection, false)
   assert.equal(
     endpointForConnection(runtime.connection),
     'https://10.0.3.1:8080',
   )
-  assert.equal(runtime.mounts.dependencies.length, 1)
+  assert.equal(runtime.mounts.dependencies.length, 0)
 })
 
 test('resolves only the selected CLN connection and preserves its rune', async () => {
@@ -151,8 +167,18 @@ test('refuses fallback, mismatched connections, and incomplete credentials', asy
     resolveSelectedRuntime('lndrest', async () => ({
       backend: 'lndrest',
       address: '',
+      macaroon: Buffer.from([1, 2, 3]),
     })),
     /address.*empty/i,
+  )
+
+  await assert.rejects(
+    resolveSelectedRuntime('lndrest', async () => ({
+      backend: 'lndrest',
+      address: '10.0.3.1:8080',
+      macaroon: Buffer.alloc(0),
+    })),
+    /macaroon.*empty/i,
   )
 })
 
@@ -161,6 +187,7 @@ test('rejects pre-schemed bridge addresses instead of double-prefixing them', as
     resolveSelectedRuntime('lndrest', async () => ({
       backend: 'lndrest',
       address: 'https://10.0.3.1:8080',
+      macaroon: Buffer.from([1, 2, 3]),
     })),
     /scheme/i,
   )
@@ -183,11 +210,19 @@ test('prepares LND credentials in the daemon subcontainer before use', async () 
   const runtime = await resolveSelectedRuntime('lndrest', async () => ({
     backend: 'lndrest',
     address: '10.0.3.1:8080',
+    macaroon: Buffer.from([1, 2, 3]),
   }))
 
   await prepareRuntimeCredentials(runtime, 'root-ca', {
+    ensureDirectory: async (path) => {
+      events.push(`mkdir:${path}`)
+    },
     writeFile: async (path, contents) => {
-      events.push(`write:${path}:${contents}`)
+      events.push(
+        typeof contents === 'string'
+          ? `write:${path}:${contents}`
+          : `write:${path}:${Buffer.from(contents).toString('hex')}`,
+      )
     },
     requireNonemptyFile: async (path) => {
       events.push(`require:${path}`)
@@ -195,7 +230,9 @@ test('prepares LND credentials in the daemon subcontainer before use', async () 
   })
 
   assert.deepEqual(events, [
+    'mkdir:/mnt/lnd/data/chain/bitcoin/mainnet',
     `write:${lndRestRuntime.rootCaPath}:root-ca`,
+    `write:${lndRestRuntime.macaroon}:010203`,
     `require:${lndRestRuntime.macaroon}`,
   ])
 })
@@ -205,10 +242,14 @@ test('fails before touching the subcontainer when the LND root is missing', asyn
   const runtime = await resolveSelectedRuntime('lndrest', async () => ({
     backend: 'lndrest',
     address: '10.0.3.1:8080',
+    macaroon: Buffer.from([1, 2, 3]),
   }))
 
   await assert.rejects(
     prepareRuntimeCredentials(runtime, '', {
+      ensureDirectory: async () => {
+        ioCalls += 1
+      },
       writeFile: async () => {
         ioCalls += 1
       },
@@ -230,6 +271,9 @@ test('does not prepare dependency credentials for CLN', async () => {
   }))
 
   await prepareRuntimeCredentials(runtime, null, {
+    ensureDirectory: async () => {
+      ioCalls += 1
+    },
     writeFile: async () => {
       ioCalls += 1
     },
@@ -254,9 +298,13 @@ test('rejects invalid backend state before preparing credentials', async () => {
         },
         mounts: mountPolicyForBackend('lndrest'),
         requiresRootCa: true,
+        lndMacaroon: Buffer.from([1, 2, 3]),
       },
       'root-ca',
       {
+        ensureDirectory: async () => {
+          ioCalls += 1
+        },
         writeFile: async () => {
           ioCalls += 1
         },

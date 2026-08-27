@@ -4,7 +4,7 @@
 
 **Goal:** Add a one-time, backed-up CLN-or-LND REST selection to the Nutshell StartOS wrapper while preserving legacy CLN mints and failing closed without backend fallback.
 
-**Architecture:** Store only `clnrest` or `lndrest` in a wrapper-owned `store.json` on a new `startos` volume. A hidden critical-task action validates the exact selected runtime connection, then serializes its final state re-read and merge with a module-scoped mutex; dependency setup, mounts, bridge resolution, and Nutshell environment construction then use only that value. Existing `0.20.3:0` installations migrate to locked CLN.
+**Architecture:** Store only `clnrest` or `lndrest` in a wrapper-owned `store.json` on a new `startos` volume. A hidden critical-task action validates the exact selected runtime connection, then serializes its final state re-read and merge with a module-scoped mutex; dependency setup, bridge and interface resolution, ephemeral runtime credential preparation, and Nutshell environment construction then use only that value. Existing `0.20.3:0` installations migrate to locked CLN.
 
 **Tech Stack:** TypeScript 6, `@start9labs/start-sdk` 2.0.9, `cln-startos`, `lnd-startos`, Node test runner, official `cashubtc/nutshell:0.20.3` image, `start-cli`, Make/s9pk.
 
@@ -295,7 +295,7 @@ test('CLN probe authenticates without putting the rune in argv or env', () => {
   assert.equal(spec.input, 'secret-rune')
 })
 
-test('LND probe enables verification and uses mounted credentials', () => {
+test('LND probe enables verification and uses an ephemeral credential file', () => {
   const spec = buildProbeSpec('lndrest', {
     endpoint: 'https://10.0.3.1:8080',
   })
@@ -327,9 +327,13 @@ In `lightningConnection.ts`:
 
 - CLN: import `clnrestPort`; resolve package `c-lightning`, host `clnrest`,
   `ssl: false`; read and decode `rune` from the CLNRest interface suffix.
-- LND: import `controlHostId` and `restPort` from
+- LND: import `controlHostId`, `lndconnectRestId`, and `restPort` from
   `lnd-startos/startos/interfaces`; resolve package `lnd`, control host, REST
   port, with `ssl` omitted because that binding publishes one TLS address.
+  Read the masked `lnd-connect-rest` interface suffix through the same requested
+  one-shot or reactive mode. Require exactly one nonempty `query.macaroon`,
+  decode its canonical base64url form into raw bytes, and reject malformed,
+  duplicate, or empty values.
 - Throw backend-specific errors for missing address or credential/interface
   state.
 
@@ -339,8 +343,9 @@ Do not inspect the unselected backend.
 
 Use `sdk.SubContainer.withTemp` with the official Nutshell image. The CLN probe
 has no dependency mount and POSTs `/v1/listfunds` with its rune header. The LND
-probe mounts `lnd/main` at `/mnt/lnd` read-only for the admin macaroon and GETs
-`/v1/getinfo` using:
+probe also has no dependency mount. It writes the decoded raw admin macaroon
+bytes into the temporary subcontainer, requires the file to be nonempty with
+the exact `test -s` check, and GETs `/v1/getinfo` using:
 
 ```text
 endpoint = https://<resolved StartOS bridge>
@@ -355,15 +360,23 @@ Resolve the nonempty root at `chain.at(-1)` from
 subcontainer before the LND exec. Run the probe with
 `poetry run python -c <fixed script>`. Pass the CLN rune through `exec` input so
 the fixed Python script reads it from stdin; SDK 2.0.9 expands environment
-values into host `start-container --env=...` arguments. The LND macaroon stays
-in the read-only mount. Cap the subcontainer exec at 15 seconds. On failure,
+values into host `start-container --env=...` arguments. Never place the raw LND
+macaroon in the command, environment, logs, action output, or persistent
+wrapper state. Cap the subcontainer exec at 15 seconds. On failure,
 discard stdout/stderr that could contain secrets and throw a localized generic
 message naming only the selected backend and remediation.
 
 This probe intentionally uses the same proxy-terminated bridge, StartOS root
-CA, and mounted macaroon as runtime; it is the TLS evidence gate, not a
+CA, and ephemeral macaroon file as runtime; it is the TLS evidence gate, not a
 synthetic check. The x86 gate must still prove the bridge hostname/IP appears
 in the presented proxy certificate SANs.
+
+Do not use a dependency file mount here. In the pinned stack, SDK 2.0.9 exposes
+a `type: 'file'` shape, but pointer preparation treats dependency mount targets
+as directories, the OS `MountTarget.filetype` field is skipped during
+deserialization, and StartOS source commit `f9ff0bfd` explicitly disables
+dependency file mounts. Do not mount the whole LND volume as a workaround; the
+masked interface suffix is the narrow credential-delivery boundary.
 
 **Step 5: Implement the hidden action and critical task**
 
@@ -455,7 +468,7 @@ type LightningConnection =
 Build common settings first, then add only the selected backend's variables in
 one branch. Do not initialize all variables and delete the unused set later.
 Keep the fixed LND certificate and macaroon paths synchronized with the
-`lndRestRuntime` contract exported by `lightningProbe.ts`.
+shared `lndRestRuntime.mjs` contract.
 
 **Step 4: Verify and commit**
 
@@ -468,24 +481,32 @@ git add startos/mintEnvironment.ts tests/mint-environment.test.ts
 git commit -m "feat: map CLN and LND mint environments"
 ```
 
-### Task 6: Wire conditional mounts and startup without fallback
+### Task 6: Wire selected runtime preparation and startup without fallback
 
 **Files:**
 
+- Create: `startos/lightningRuntime.ts`
+- Create: `startos/lndRestRuntime.mjs`
+- Create: `startos/lndRestRuntime.d.mts`
 - Modify: `startos/main.ts`
+- Modify: `startos/lightningConnection.ts`
+- Modify: `startos/lightningProbe.ts`
 - Modify: `startos/actions/showMintInfo.ts`
 - Modify: `startos/utils.ts`
 - Modify: `startos/i18n/dictionaries/default.ts`
 - Modify: `startos/i18n/dictionaries/translations.ts`
 - Test: `tests/lightning-backend.test.ts`
+- Test: `tests/lightning-probe.test.ts`
+- Create: `tests/lightning-runtime.test.ts`
+- Create: `tests/main-wiring.test.ts`
 
-**Step 1: Add failing mount-policy tests**
+**Step 1: Add failing runtime-policy tests**
 
 Add a pure `mountPolicyForBackend` helper and test:
 
 ```ts
-assert.deepEqual(mountPolicyForBackend('clnrest'), { mountLnd: false })
-assert.deepEqual(mountPolicyForBackend('lndrest'), { mountLnd: true })
+assert.deepEqual(mountPolicyForBackend('clnrest').dependencies, [])
+assert.deepEqual(mountPolicyForBackend('lndrest').dependencies, [])
 ```
 
 Also assert `backendDisplayName('clnrest')` and
@@ -504,13 +525,17 @@ At startup:
 1. Read `storeJson.lightningBackend` with `.const(effects)`.
 2. Call `assertLightningBackend`; do not default.
 3. Resolve only that backend with `lightningConnection.ts`.
-4. Start with the existing writable `main` mount for CLN.
-5. For LND only, add `mountDependency<typeof lndManifest>` for `lnd/main` at
-   `/mnt/lnd`, `subpath: null`, `readonly: true`.
+4. Use only the existing writable `main` mount for either backend. Do not mount
+   a CLN or LND dependency volume.
+5. For LND, reactively resolve both its bridge address and masked
+   `lnd-connect-rest` interface suffix. Strictly decode the single
+   `query.macaroon` value into raw bytes and keep it in memory only.
 6. Obtain the StartOS root CA from `sdk.getSslCertificate(effects, [])`, require
    a nonempty `chain.at(-1)`, and write it to
    `lndRestRuntime.rootCaPath` (`/tmp/startos-root-ca.pem`) in the same Nutshell
-   subcontainer before launching the daemon.
+   subcontainer before launching the daemon. Write the decoded raw macaroon to
+   `lndRestRuntime.macaroon`, require it with exact `test -s`, and destroy the
+   subcontainer before rethrowing any preparation failure.
 7. Pass the discriminated connection to `buildMintEnvironment`.
 
 Keep the existing mint port health check. If resolution or credentials fail,
@@ -564,7 +589,8 @@ Document:
 - existing upgrades automatically remaining CLN;
 - CLNRest enablement and restricted rune;
 - LND on the same StartOS system, proxy-terminated internal HTTPS REST,
-  StartOS-root verification, read-only volume, and admin-macaroon privilege;
+  StartOS-root verification, masked interface credential delivery, ephemeral
+  credential file, and admin-macaroon privilege;
 - no manual credential copy;
 - fail-closed same-backend recovery;
 - backup/restore preservation;
@@ -675,8 +701,9 @@ replace. Redact credentials.
 **Step 2: Prove the exact LND TLS path first**
 
 Sideload the x86 artifact, fresh-install Nutshell, and choose LND. The selector
-must succeed using the internal bridge, StartOS root CA, mounted admin
-macaroon, and verification enabled. Confirm that the bridge hostname/IP matches
+must succeed using the internal bridge, StartOS root CA, ephemeral admin
+macaroon file materialized from the masked interface, and verification enabled.
+Confirm that the bridge hostname/IP matches
 a SAN in the StartOS proxy/device certificate. Then start Nutshell and confirm
 the same connection remains healthy.
 
