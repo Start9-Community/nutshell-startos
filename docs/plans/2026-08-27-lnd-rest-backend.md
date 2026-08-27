@@ -4,7 +4,7 @@
 
 **Goal:** Add a one-time, backed-up CLN-or-LND REST selection to the Nutshell StartOS wrapper while preserving legacy CLN mints and failing closed without backend fallback.
 
-**Architecture:** Store only `clnrest` or `lndrest` in a wrapper-owned `store.json` on a new `startos` volume. A hidden critical-task action validates the exact selected runtime connection before atomically locking it; dependency setup, mounts, bridge resolution, and Nutshell environment construction then use only that value. Existing `0.20.3:0` installations migrate to locked CLN.
+**Architecture:** Store only `clnrest` or `lndrest` in a wrapper-owned `store.json` on a new `startos` volume. A hidden critical-task action validates the exact selected runtime connection, then serializes its final state re-read and merge with a module-scoped mutex; dependency setup, mounts, bridge resolution, and Nutshell environment construction then use only that value. Existing `0.20.3:0` installations migrate to locked CLN.
 
 **Tech Stack:** TypeScript 6, `@start9labs/start-sdk` 2.0.9, `cln-startos`, `lnd-startos`, Node test runner, official `cashubtc/nutshell:0.20.3` image, `start-cli`, Make/s9pk.
 
@@ -280,18 +280,19 @@ git commit -m "feat: declare conditional CLN and LND dependencies"
 
 **Step 1: Write failing pure probe-spec tests**
 
-Define a pure builder that returns a command and environment without importing
-the SDK. Test these guarantees:
+Define a pure builder that returns a command, environment, and optional stdin
+input without importing the SDK. Test these guarantees:
 
 ```ts
-test('CLN probe authenticates without putting the rune in argv', () => {
+test('CLN probe authenticates without putting the rune in argv or env', () => {
   const spec = buildProbeSpec('clnrest', {
     endpoint: 'http://10.0.3.1:3010',
     credential: 'secret-rune',
   })
   assert.match(spec.env.PROBE_URL, /^http:/)
-  assert.equal(spec.env.PROBE_CREDENTIAL, 'secret-rune')
   assert.equal(spec.command.join(' ').includes('secret-rune'), false)
+  assert.equal(Object.values(spec.env).includes('secret-rune'), false)
+  assert.equal(spec.input, 'secret-rune')
 })
 
 test('LND probe enables verification and uses mounted credentials', () => {
@@ -299,7 +300,7 @@ test('LND probe enables verification and uses mounted credentials', () => {
     endpoint: 'https://10.0.3.1:8080',
   })
   assert.equal(spec.env.PROBE_CERT_VERIFY, 'true')
-  assert.equal(spec.env.PROBE_CERT, '/mnt/lnd/tls.cert')
+  assert.equal(spec.env.PROBE_CERT, '/tmp/startos-root-ca.pem')
   assert.equal(
     spec.env.PROBE_CREDENTIAL,
     '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
@@ -308,9 +309,11 @@ test('LND probe enables verification and uses mounted credentials', () => {
 ```
 
 Add lock tests confirming validation failure is evaluated before
-`storeJson.merge` is called. Accomplish this with a small injected
-`validateThenLock(current, requested, validate, persist)` helper rather than
-mocking the SDK.
+`storeJson.merge` is called. Accomplish this with a small SDK-free injected
+helper rather than mocking the SDK. Its module-scoped async mutex must cover
+only the final state re-read and merge. Start two validations from absent state
+and prove exactly one commits; also prove a failed persistence releases the
+mutex.
 
 **Step 2: Run and verify failure**
 
@@ -336,23 +339,31 @@ Do not inspect the unselected backend.
 
 Use `sdk.SubContainer.withTemp` with the official Nutshell image. The CLN probe
 has no dependency mount and POSTs `/v1/listfunds` with its rune header. The LND
-probe mounts `lnd/main` at `/mnt/lnd` read-only and GETs `/v1/getinfo` using:
+probe mounts `lnd/main` at `/mnt/lnd` read-only for the admin macaroon and GETs
+`/v1/getinfo` using:
 
 ```text
 endpoint = https://<resolved StartOS bridge>
-certificate = /mnt/lnd/tls.cert
+certificate authority = /tmp/startos-root-ca.pem
 macaroon = /mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon
 certificate verification = true
 timeout = 5 seconds
 ```
 
-Run the probe with `poetry run python -c <fixed script>` and pass secrets only
-through the environment or mounted files. Cap the subcontainer exec at 15
-seconds. On failure, discard stdout/stderr that could contain secrets and throw
-a localized generic message naming only the selected backend and remediation.
+Resolve the nonempty root at `chain.at(-1)` from
+`sdk.getSslCertificate(effects, []).once()` and write it into the temporary
+subcontainer before the LND exec. Run the probe with
+`poetry run python -c <fixed script>`. Pass the CLN rune through `exec` input so
+the fixed Python script reads it from stdin; SDK 2.0.9 expands environment
+values into host `start-container --env=...` arguments. The LND macaroon stays
+in the read-only mount. Cap the subcontainer exec at 15 seconds. On failure,
+discard stdout/stderr that could contain secrets and throw a localized generic
+message naming only the selected backend and remediation.
 
-This probe intentionally uses the same bridge and credential files as runtime;
-it is the TLS evidence gate, not a synthetic check.
+This probe intentionally uses the same proxy-terminated bridge, StartOS root
+CA, and mounted macaroon as runtime; it is the TLS evidence gate, not a
+synthetic check. The x86 gate must still prove the bridge hostname/IP appears
+in the presented proxy certificate SANs.
 
 **Step 5: Implement the hidden action and critical task**
 
@@ -364,11 +375,12 @@ visibility: 'hidden'
 warning: 'This choice is permanent for this mint.'
 ```
 
-The action reads state once, calls `validateThenLock`, and atomically merges the
-value only after the probe succeeds. The init task checks state on every init
-kind and creates its own `critical` task only when no backend exists. Register
-actions before creating the task. Restores with backed-up state and upgraded
-legacy mints therefore receive no task.
+The action reads state once and calls `validateThenLock`. Validation runs
+outside its module-scoped mutex; after success the helper holds the mutex across
+the final state re-read, second lock assertion, and atomic merge. The init task
+checks state on every init kind and creates its own `critical` task only when no
+backend exists. Register actions before creating the task. Restores with
+backed-up state and upgraded legacy mints therefore receive no task.
 
 **Step 6: Verify and commit**
 
@@ -413,7 +425,7 @@ test('builds only the verified LND REST environment for LND', () => {
   })
   assert.equal(env.MINT_BACKEND_BOLT11_SAT, 'LndRestWallet')
   assert.equal(env.MINT_LND_REST_ENDPOINT, 'https://10.0.3.1:8080')
-  assert.equal(env.MINT_LND_REST_CERT, '/mnt/lnd/tls.cert')
+  assert.equal(env.MINT_LND_REST_CERT, '/tmp/startos-root-ca.pem')
   assert.equal(
     env.MINT_LND_REST_MACAROON,
     '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
@@ -442,6 +454,8 @@ type LightningConnection =
 
 Build common settings first, then add only the selected backend's variables in
 one branch. Do not initialize all variables and delete the unused set later.
+Keep the fixed LND certificate and macaroon paths synchronized with the
+`lndRestRuntime` contract exported by `lightningProbe.ts`.
 
 **Step 4: Verify and commit**
 
@@ -493,7 +507,11 @@ At startup:
 4. Start with the existing writable `main` mount for CLN.
 5. For LND only, add `mountDependency<typeof lndManifest>` for `lnd/main` at
    `/mnt/lnd`, `subpath: null`, `readonly: true`.
-6. Pass the discriminated connection to `buildMintEnvironment`.
+6. Obtain the StartOS root CA from `sdk.getSslCertificate(effects, [])`, require
+   a nonempty `chain.at(-1)`, and write it to
+   `lndRestRuntime.rootCaPath` (`/tmp/startos-root-ca.pem`) in the same Nutshell
+   subcontainer before launching the daemon.
+7. Pass the discriminated connection to `buildMintEnvironment`.
 
 Keep the existing mint port health check. If resolution or credentials fail,
 throw before creating the daemon. Never branch to the other backend.
@@ -545,8 +563,8 @@ Document:
 - permanent lock and financial reason for it;
 - existing upgrades automatically remaining CLN;
 - CLNRest enablement and restricted rune;
-- LND on the same StartOS system, internal HTTPS REST, verified certificate,
-  read-only volume, and admin-macaroon privilege;
+- LND on the same StartOS system, proxy-terminated internal HTTPS REST,
+  StartOS-root verification, read-only volume, and admin-macaroon privilege;
 - no manual credential copy;
 - fail-closed same-backend recovery;
 - backup/restore preservation;
@@ -657,9 +675,10 @@ replace. Redact credentials.
 **Step 2: Prove the exact LND TLS path first**
 
 Sideload the x86 artifact, fresh-install Nutshell, and choose LND. The selector
-must succeed using the internal bridge, mounted `tls.cert`, mounted admin
-macaroon, and verification enabled. Then start Nutshell and confirm the same
-connection remains healthy.
+must succeed using the internal bridge, StartOS root CA, mounted admin
+macaroon, and verification enabled. Confirm that the bridge hostname/IP matches
+a SAN in the StartOS proxy/device certificate. Then start Nutshell and confirm
+the same connection remains healthy.
 
 If the selector or runtime reports certificate validation failure, stop. Do not
 set `MINT_LND_REST_CERT_VERIFY=false`. Capture only the sanitized error and

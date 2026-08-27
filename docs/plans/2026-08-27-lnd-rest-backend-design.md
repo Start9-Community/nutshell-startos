@@ -60,12 +60,20 @@ in order:
 1. Refuse the request if a backend is already recorded.
 2. Resolve the selected StartOS dependency and its required interface.
 3. Perform an authenticated API probe with the selected credentials.
-4. Atomically write the choice only after the probe succeeds.
-5. Complete the critical setup task.
+4. Enter a wrapper-process mutex, re-read the backed-up state, and refuse if a
+   concurrent or replayed action already committed a choice.
+5. Atomically merge the choice while still holding the mutex.
+6. Complete the critical setup task.
 
 A failed probe writes nothing and leaves the setup task open. The action remains
 defensively non-repeatable after success even if called outside the task UI.
 There will be no reset or switch action.
+
+The authenticated probe runs outside the mutex. Only the final re-read and
+merge are serialized, so a slow or unavailable Lightning node cannot block
+another completed probe from reaching the commit gate. `store.json` remains the
+sole backed-up authority; the mutex is process-local coordination, not a second
+state file.
 
 The wrapper-owned migration from `0.20.3:0` assigns `clnrest` to every existing
 installation. This preserves the backend on which those mints were created and
@@ -99,6 +107,9 @@ The CLN path retains the current contract:
 - Resolve CLNRest over the plaintext internal StartOS service bridge.
 - Read the restricted rune from the exported CLNRest interface suffix.
 - Authenticate an API probe before committing a fresh selection.
+- Deliver the probe rune over the child process's standard input. The StartOS
+  SDK expands `exec` environment values into host process arguments, so the
+  rune must not be placed in the probe command or environment.
 - Start Nutshell with `MINT_BACKEND_BOLT11_SAT=CLNRestWallet`, the internal HTTP
   URL, and the decoded rune.
 - Do not mount a CLN volume.
@@ -113,24 +124,30 @@ working StartOS service-to-service patterns:
 
 - Resolve LND REST over the HTTPS internal StartOS service bridge.
 - Mount LND's main volume read-only into the Nutshell subcontainer.
-- Use the mounted LND TLS certificate and Bitcoin mainnet admin macaroon.
+- Use the mounted Bitcoin mainnet admin macaroon for authentication.
+- Obtain the StartOS root CA from `sdk.getSslCertificate(effects, [])` and
+  write only that root into the ephemeral Nutshell subcontainer at
+  `/tmp/startos-root-ca.pem` for bridge-server verification.
 - Authenticate `/v1/getinfo` with certificate verification enabled before
   committing a fresh selection.
 - Start Nutshell with `MINT_BACKEND_BOLT11_SAT=LndRestWallet`, its internal
-  HTTPS REST endpoint, mounted certificate path, mounted macaroon path, and
-  certificate verification enabled.
+  HTTPS REST endpoint, ephemeral StartOS root-CA path, mounted macaroon path,
+  and certificate verification enabled.
 
-The certificate and macaroon are referenced in place. They are not copied into
+The StartOS root CA is copied only into the temporary or runtime Nutshell
+subcontainer. The macaroon is referenced in place. Neither is copied into
 `store.json`, Nutshell configuration, task results, or logs. The LND volume is
-never mounted writable.
+never mounted writable; its `tls.cert` is not the trust anchor for this REST
+path.
 
-LND's current REST binding uses StartOS SSL rewrapping. Therefore both the
-selection probe and the first x86 device test must use the exact runtime path:
-the resolved bridge endpoint, the read-only mounted `tls.cert`, certificate
-verification enabled, and the mounted admin macaroon. A successful build does
-not prove this certificate path. If the authenticated probe fails, stop and
-revisit the integration boundary; do not silently disable verification or lock
-the backend.
+LND's current REST binding uses StartOS SSL rewrapping, so the bridge presents a
+StartOS proxy/device certificate rather than LND's `tls.cert`. Therefore both
+the selection probe and the first x86 device test must use the exact runtime
+path: the resolved bridge endpoint, StartOS root CA, certificate verification
+enabled, and the read-only mounted admin macaroon. A successful build does not
+prove that the bridge address matches a proxy certificate SAN. If the
+authenticated probe fails, stop and revisit the integration boundary; do not
+silently disable verification or lock the backend.
 
 LND's admin macaroon is more privileged than CLN's restricted rune. This is the
 credential documented by Nutshell for LND REST and used by existing StartOS
@@ -150,9 +167,10 @@ Nutshell container -> internal StartOS bridge -> selected CLN or LND container
 ```
 
 LND and Nutshell must be installed on the same StartOS system. The internal LND
-connection uses LND's service certificate. It does not use or constrain the
-public certificate or exposure method for the Nutshell interface. The package
-will not expose a configurable remote LND endpoint.
+connection verifies the StartOS proxy/device certificate against the StartOS
+root CA. It does not use or constrain the public certificate or exposure method
+for the Nutshell interface. The package will not expose a configurable remote
+LND endpoint.
 
 User-facing wording should mirror the current CLN documentation: install and
 start the selected Lightning node, the services find each other, and the mint's
@@ -183,7 +201,8 @@ and contributor guidance together. Documentation must cover:
 - the one-time CLN-or-LND choice and why it cannot be changed;
 - prerequisites and setup steps for both local StartOS dependencies;
 - CLNRest enablement and rune behavior;
-- LND's internal REST TLS, read-only credential mount, and admin-macaroon scope;
+- LND's proxy-terminated internal REST TLS, StartOS root CA, read-only
+  credential mount, and admin-macaroon scope;
 - fail-closed behavior and same-backend recovery;
 - backup and restore preservation;
 - the separation between internal Lightning connectivity and public mint
