@@ -377,10 +377,10 @@ warning: 'This choice is permanent for this mint.'
 
 The action reads state once and calls `validateThenLock`. Validation runs
 outside its module-scoped mutex; after success the helper holds the mutex across
-the final state re-read, second lock assertion, and atomic merge. The init task
-checks state on every init kind and creates its own `critical` task only when no
-backend exists. Register actions before creating the task. Restores with
-backed-up state and upgraded legacy mints therefore receive no task.
+the final state re-read, second lock assertion, and serialized merge. The init
+task checks state on every init kind and creates its own `critical` task only
+when no backend exists. Register actions before creating the task. Restores
+with backed-up state and upgraded legacy mints therefore receive no task.
 
 **Step 6: Verify and commit**
 

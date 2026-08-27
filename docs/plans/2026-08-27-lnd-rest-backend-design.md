@@ -62,7 +62,7 @@ in order:
 3. Perform an authenticated API probe with the selected credentials.
 4. Enter a wrapper-process mutex, re-read the backed-up state, and refuse if a
    concurrent or replayed action already committed a choice.
-5. Atomically merge the choice while still holding the mutex.
+5. Commit the choice with a serialized merge while still holding the mutex.
 6. Complete the critical setup task.
 
 A failed probe writes nothing and leaves the setup task open. The action remains
