@@ -37,8 +37,8 @@ one Lightning backend first:
 1. **Choose the node this mint will use permanently.** Changing it later
    requires creating a genuinely fresh Nutshell mint.
 2. **Install and start that node on the same StartOS system.**
-   - For **Core Lightning**, enable CLNRest in Core Lightning's settings and
-     restart it. CLNRest is not enabled by default.
+   - For **Core Lightning**, ensure the supported package's default-enabled
+     CLNRest setting remains enabled, then restart it after any related change.
    - For **LND**, initialize and unlock its wallet so its REST interface is
      available.
 3. **Install Nutshell and open its critical _Select Lightning Backend_ task.**
@@ -56,11 +56,13 @@ one Lightning backend first:
    locked backend selection come back.
 
 For LND, StartOS carries the masked admin macaroon through the internal
-interface. Nutshell verifies the proxy-terminated HTTPS connection against the
-StartOS root CA and writes the decoded credential only to an ephemeral file in
-its own container. No LND volume is mounted and no credential is copied by the
-operator. The admin macaroon is more privileged than the restricted CLNRest
-rune, so protect access to both services and your StartOS system.
+interface and wrapper memory. Nutshell verifies the proxy-terminated HTTPS
+connection against the StartOS root CA and writes the decoded credential to an
+ephemeral file with mode `0600` in its own container. No LND volume is mounted
+and no credential is copied by the operator. The LND credential is not stored
+in wrapper state or intentionally placed in command arguments, environment
+values, action output, or logs. Both the CLN rune and LND admin macaroon are
+highly privileged, so protect access to both services and your StartOS system.
 
 ## Using Nutshell
 
@@ -109,6 +111,10 @@ needs to be re-entered. Older CLN-only backups are migrated to locked CLN.
 A restore cannot recover ecash issued after the backup. Those tokens exist in
 wallets but not in the restored ledger, and the mint will refuse them. Back up
 after real activity, not on a schedule intended for a stateless service.
+
+Test a restore only on an isolated system. Never expose or run the original
+mint and its restored copy at the same time; the two copies can diverge while
+presenting the same mint identity.
 
 ## Limitations
 

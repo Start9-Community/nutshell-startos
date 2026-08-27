@@ -133,7 +133,7 @@ test('resolves only the selected CLN connection and preserves its rune', async (
     return {
       backend: 'clnrest',
       address: '10.0.3.2:3010',
-      rune: 'restricted-rune',
+      rune: 'cln-rune',
     }
   })
 
@@ -141,7 +141,7 @@ test('resolves only the selected CLN connection and preserves its rune', async (
   assert.deepEqual(runtime.connection, {
     backend: 'clnrest',
     address: '10.0.3.2:3010',
-    rune: 'restricted-rune',
+    rune: 'cln-rune',
   })
   assert.equal(
     endpointForConnection(runtime.connection),
@@ -173,7 +173,7 @@ test('refuses fallback, mismatched connections, and incomplete credentials', asy
     resolveSelectedRuntime('lndrest', async () => ({
       backend: 'clnrest',
       address: '10.0.3.2:3010',
-      rune: 'restricted-rune',
+      rune: 'cln-rune',
     })),
     /does not match/i,
   )
@@ -291,7 +291,7 @@ test('does not prepare dependency credentials for CLN', async () => {
   const runtime = await resolveSelectedRuntime('clnrest', async () => ({
     backend: 'clnrest',
     address: '10.0.3.2:3010',
-    rune: 'restricted-rune',
+    rune: 'cln-rune',
   }))
 
   await prepareRuntimeCredentials(runtime, null, {

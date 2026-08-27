@@ -7,7 +7,7 @@ const dict = {
   'The mint is responsive': 2,
   'The mint is not ready': 3,
   'Core Lightning is not reachable on the internal network. Make sure Core Lightning is installed, running, and has CLNRest enabled in its config.': 4,
-  "Core Lightning's CLNRest rune could not be read. Enable CLNRest in Core Lightning's config, restart it, and start Nutshell again.": 5,
+  "Core Lightning's CLNRest rune could not be read. Ensure CLNRest remains enabled in Core Lightning's config, restart it, and start Nutshell again.": 5,
 
   // interfaces.ts
   'Cashu Mint API': 6,

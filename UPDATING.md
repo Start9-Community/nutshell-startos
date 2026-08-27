@@ -40,6 +40,12 @@ For Core Lightning:
 here), but the `clnrest` host id and the `?rune=` query parameter are read by convention from
 `cln-startos/startos/interfaces.ts`. If cln stops publishing the rune that way, `main.ts` throws
 instead of starting a mint with no Lightning backend — loud, but still a break.
+The supported CLN package enables CLNRest by default; confirm that it remains
+enabled. Its application rune is highly privileged: the pinned package calls
+`createrune null [["For Application#"]]`, where `#` makes the remainder a
+comment rather than a demonstrated restriction. Runtime must retain the last
+rune across a temporary `null` suffix during rotation, while one-shot
+validation, address loss, and a changed malformed suffix still fail closed.
 
 For LND, `controlHostId`, `restPort`, and `lndconnectRestId` are imported from
 `lnd-startos/startos/interfaces`. Its masked `lnd-connect-rest` suffix must
@@ -48,6 +54,9 @@ raw admin-macaroon bytes. Runtime reads the address and suffix reactively;
 validation reads them once. The wrapper decodes the credential in memory,
 creates the fixed nested directory, writes the raw bytes with mode `0600`, and
 requires the ephemeral file with exact `test -s` before probing or launching.
+The LND admin macaroon is also highly privileged. It transits the masked
+interface and wrapper memory but is not persisted in wrapper state or
+intentionally placed in argv, environment values, action output, or logs.
 Neither Lightning dependency volume is mounted. Do not replace this with a
 dependency file mount: the pinned SDK/OS stack does not support dependency file
 mounts end to end, and mounting the whole LND volume overexposes node state.
@@ -103,11 +112,12 @@ the authorized disposable x86 StartOS VM; ARM evidence is build-and-inspection
 only until an authorized ARM device is available. Do not describe an ARM
 runtime as tested without that evidence.
 
-On x86, verify three paths before tagging:
+On x86, verify three paths before approving the release PR for merge:
 
-1. update an existing `0.20.3:0` CLN mint and confirm it becomes locked CLN
+1. update an existing released `0.20.3:1` CLN mint and confirm it becomes locked CLN
    without a new selection task or data loss;
-2. fresh-install, select CLN, and confirm the restricted-rune path starts; and
+2. fresh-install, select CLN, and confirm the highly privileged interface-rune
+   path starts; and
 3. fresh-install alongside initialized and unlocked LND, select LND, and prove
    the exact proxy HTTPS path uses the StartOS root and interface-delivered
    ephemeral admin macaroon with certificate verification enabled.
@@ -117,11 +127,17 @@ Mint Status reports the seed and actual backend. Back up and restore the locked
 selection, then confirm failure of the selected node stops Nutshell without
 fallback. Keep the public mint exposure test independent: LAN, Tor, domains,
 and Start Tunnel do not alter the internal same-StartOS Lightning connection.
+Perform restore testing on an isolated system, and never expose or run the
+original mint and restored copy simultaneously.
 
 For a migration-bearing release, restore a disposable production-shaped backup,
 update it, and exercise the authorized non-production lifecycle evidence before
-tagging. A listening port proves only that the mint is serving; any real mint or
-melt test requires explicit authorization because it performs a financial
-operation.
+approving the PR. A listening port proves only that the mint is serving; any
+real mint or melt test requires explicit authorization because it performs a
+financial operation.
 
-Tags are `v<upstream>_<downstream>`. Do not create or push the tag until the device test is done.
+The reviewed PR and merge are the human release gate. After a non-documentation
+change reaches Community `main`, `.github/workflows/tagAndRelease.yml` invokes
+the Community release automation, which creates and publishes the
+`v<upstream>_<downstream>` tag and release. Do not create or push that tag
+manually.

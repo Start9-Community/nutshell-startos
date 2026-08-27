@@ -4,8 +4,8 @@
 
 Approved on 2026-08-27 for implementation against
 `Start9-Community/nutshell-startos` through a pull request. The implementation
-branch is based on Community `main` at
-`a41ed037c926a59b9b4c5df580c23feb09235b06`.
+branch is synchronized with Community `main` at
+`bb48542b91fcf22e3e70059433ed86310ee9f7ce` (`v0.20.3_1`).
 
 ## Goal
 
@@ -19,9 +19,11 @@ never detect or fall back to another Lightning node.
 
 The current package has one mandatory `c-lightning` dependency. At every start
 it resolves CLNRest over the plaintext StartOS service bridge, reads the
-restricted rune from CLN's exported interface, and starts Nutshell with
+highly privileged rune from CLN's exported interface, and starts Nutshell with
 `CLNRestWallet`. Missing CLNRest connectivity or a missing rune prevents the
-daemon from being created.
+daemon from being created. Its reactive suffix watch retains the last rune
+during a temporary `null` gap while CLN rotates it, but address loss and a
+changed malformed suffix still fail closed.
 
 This design preserves that fail-closed behavior while replacing the hard-coded
 backend with an explicit, immutable choice.
@@ -75,12 +77,14 @@ another completed probe from reaching the commit gate. `store.json` remains the
 sole backed-up authority; the mutex is process-local coordination, not a second
 state file.
 
-The wrapper-owned migration from `0.20.3:0` assigns `clnrest` to every existing
-installation. This preserves the backend on which those mints were created and
-does not interrupt them with a new setup decision. A backup made after this
-change includes both `main` and `startos`; restore therefore preserves the
-choice. Restoring or upgrading legacy data through the version graph also
-assigns CLN rather than treating it as a fresh mint.
+The released Community `0.20.3:1` version remains an exact historical graph
+node. The wrapper-owned `0.20.3:2` migration assigns `clnrest` to every
+installation upgraded from `0.20.3:1` or earlier. This preserves the backend on
+which those mints were created and does not interrupt them with a new setup
+decision. A backup made after this change includes both `main` and `startos`;
+restore therefore preserves the choice. Restoring or upgrading legacy data
+through the version graph also assigns CLN rather than treating it as a fresh
+mint.
 
 ## Conditional Dependencies and Startup
 
@@ -105,7 +109,10 @@ readiness is governed by StartOS dependency health and normal runtime behavior.
 The CLN path retains the current contract:
 
 - Resolve CLNRest over the plaintext internal StartOS service bridge.
-- Read the restricted rune from the exported CLNRest interface suffix.
+- Read the highly privileged rune from the exported CLNRest interface suffix.
+- During runtime only, retain the prior rune when a reactive suffix update is
+  temporarily `null`; a changed value is re-parsed and fails closed if it does
+  not contain a rune. One-shot selection validation rejects a missing suffix.
 - Authenticate an API probe before committing a fresh selection.
 - Deliver the probe rune over the child process's standard input. The StartOS
   SDK expands `exec` environment values into host process arguments, so the
@@ -141,8 +148,10 @@ working StartOS service-to-service patterns:
   and certificate verification enabled.
 
 The StartOS root CA and decoded macaroon are copied only into the temporary or
-runtime Nutshell subcontainer. Neither is copied into `store.json`, Nutshell
-configuration, task results, logs, command arguments, or environment values.
+runtime Nutshell subcontainer. The macaroon transits the masked interface and
+wrapper memory, but is not persisted in wrapper state or intentionally placed
+in Nutshell configuration, action output, logs, command arguments, or
+environment values.
 No LND dependency volume is mounted. The selected LND address and masked
 interface suffix are read reactively at runtime, so address or credential
 rotation restarts the daemon with newly materialized files. LND's `tls.cert` is
@@ -165,10 +174,13 @@ prove that the bridge address matches a proxy certificate SAN. If the
 authenticated probe fails, stop and revisit the integration boundary; do not
 silently disable verification or lock the backend.
 
-LND's admin macaroon is more privileged than CLN's restricted rune. This is the
-credential documented by Nutshell for LND REST and used by existing StartOS
-integrations. Documentation must state this difference and the fact that the
-credential is exposed only to the selected Nutshell container.
+Both LND's admin macaroon and CLN's application rune are highly privileged.
+The pinned CLN package calls `createrune null [["For Application#"]]`; because
+`#` comments the remainder, that call does not demonstrate a restriction to
+application methods. The LND credential is the one documented by Nutshell for
+LND REST and used by existing StartOS integrations. Documentation must describe
+the masked-interface, wrapper-memory, and ephemeral-file handling without
+claiming a comparative privilege boundary.
 
 ## Networking Boundary
 
@@ -209,6 +221,10 @@ Lightning node. An operator who intentionally wants another backend must create
 a genuinely fresh Nutshell installation and mint; no in-place escape hatch is
 provided.
 
+Backup restores must be tested on an isolated system. The original mint and a
+restored copy must never be exposed or run simultaneously, because the two
+copies can diverge while presenting the same mint identity.
+
 ## Documentation
 
 Update the manifest descriptions, `README.md`, `instructions.md`, `UPDATING.md`,
@@ -216,9 +232,10 @@ and contributor guidance together. Documentation must cover:
 
 - the one-time CLN-or-LND choice and why it cannot be changed;
 - prerequisites and setup steps for both local StartOS dependencies;
-- CLNRest enablement and rune behavior;
+- default-enabled CLNRest remaining enabled and its rune-rotation behavior;
 - LND's proxy-terminated internal REST TLS, StartOS root CA, masked interface
-  credential delivery, ephemeral credential file, and admin-macaroon scope;
+  credential delivery, ephemeral credential file, and highly privileged
+  admin-macaroon handling;
 - fail-closed behavior and same-backend recovery;
 - backup and restore preservation;
 - the separation between internal Lightning connectivity and public mint
@@ -244,7 +261,7 @@ runtime evidence will be available only for `x86_64`.
 
 On the authorized disposable x86 StartOS VM:
 
-1. Upgrade an existing `0.20.3:0` CLN installation and verify it becomes locked
+1. Upgrade an existing released `0.20.3:1` CLN installation and verify it becomes locked
    CLN without losing mint data.
 2. Fresh-install and select CLN.
 3. Fresh-install Nutshell and LND on the same StartOS system, then verify the
@@ -254,7 +271,8 @@ On the authorized disposable x86 StartOS VM:
 5. With both Lightning nodes installed, stop the selected node and verify there
    is no fallback.
 6. Restart and verify selection persistence.
-7. Back up, reinstall, restore, and verify the same backend remains locked.
+7. Back up, reinstall, and verify the same backend remains locked on an
+   isolated restore system without running or exposing the original concurrently.
 8. Use a clean reinstall or VM snapshot between CLN and LND paths.
 
 Financial mint-and-melt operations must not be automated or inferred. A real

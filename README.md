@@ -99,20 +99,22 @@ running dependency.
 Neither Lightning dependency's volume is mounted.
 
 For Core Lightning, the mint uses the plaintext internal service bridge and
-authenticates with the restricted rune published in the CLNRest interface's
-`?rune=` suffix. **CLNRest has to be enabled in Core Lightning's own config.**
-It is not on by default; without it, the address and rune do not resolve and
-Nutshell fails closed.
+authenticates with the highly privileged rune published in the CLNRest
+interface's `?rune=` suffix. **CLNRest is enabled by default in the supported
+Core Lightning package; ensure it remains enabled.** Without it, the address
+and rune do not resolve and Nutshell fails closed. During a rune rotation, the
+runtime keeps the last rune through a temporary missing suffix; a missing
+address or a changed malformed suffix still fails closed.
 
 For LND, the mint uses the proxy-terminated HTTPS bridge and verifies the
 presented certificate with the StartOS root CA. The masked `lnd-connect-rest`
-interface supplies the base64url-encoded raw admin macaroon. The wrapper decodes
-it in memory and writes it with mode `0600` only inside the temporary or runtime
-Nutshell subcontainer. No dependency volume is mounted, and the operator does
-not copy a macaroon or certificate. The admin macaroon is more privileged than
-the restricted CLN rune; it is exposed only to the selected Nutshell
-subcontainer and never stored in wrapper state, logs, command arguments, or
-environment values.
+interface supplies the base64url-encoded raw admin macaroon. The credential
+transits the masked interface and wrapper memory, then the wrapper writes it
+with mode `0600` only inside the temporary or runtime Nutshell subcontainer.
+No dependency volume is mounted, and the operator does not copy a macaroon or
+certificate. Both the CLN rune and LND admin macaroon are highly privileged.
+The LND credential is not persisted in wrapper state or intentionally placed
+in command arguments, environment values, action output, or logs.
 
 Both the Lightning node and Nutshell must be on the same StartOS system. Remote
 or LAN Lightning endpoints are not configurable.
@@ -132,7 +134,8 @@ The mint speaks plain HTTP inside its container; StartOS terminates TLS and owns
 There are no credentials to copy by hand. Before installing Nutshell, install
 and start the Lightning node this mint will use on the same StartOS system:
 
-- for Core Lightning, enable CLNRest and restart Core Lightning; or
+- for Core Lightning, ensure its default-enabled CLNRest interface remains
+  enabled and restart Core Lightning after any related configuration change; or
 - for LND, initialize and unlock its wallet so the masked REST interface is
   available.
 
@@ -145,8 +148,9 @@ succeeds.
 The selection is permanent because changing Lightning wallets underneath an
 established ecash mint can break its accounting and strand outstanding tokens.
 There is no switch or reset action and no fallback to the other node. Existing
-installations upgraded from `0.20.3:0` are automatically locked to CLN, which
-preserves the backend on which those mints were created.
+installations upgraded from the released `0.20.3:1` package or an earlier
+version are automatically locked to CLN, which preserves the backend on which
+those mints were created.
 
 On every subsequent start, the wrapper reactively resolves only the selected
 backend's address and credentials, builds its environment, and launches the
@@ -212,6 +216,10 @@ The whole `main` volume is copied wholesale. Nothing is excluded and nothing is 
 A restored instance needs no Lightning credential re-entered. The seed is on the volume, so init's existence check sees it and does **not** generate a new one — that check is the whole reason a restore is survivable. The stored backend remains authoritative, while its StartOS bridge address and exported credential are resolved fresh on every start. The same backend must be installed and ready on the restored StartOS system; Nutshell will not substitute the other node. A legacy CLN installation or backup with no wrapper state is migrated to locked CLN.
 
 What a restore cannot fix is a stale backup. Ecash issued after the backup exists in wallets but not in the restored ledger, and the mint will refuse those proofs. Back up after any period of real activity, not on a schedule chosen for a stateless service.
+
+Test restores only on an isolated system. Never expose or run the original mint
+and a restored copy simultaneously: two live copies can diverge while claiming
+the same mint identity.
 
 ## Limitations and Differences
 

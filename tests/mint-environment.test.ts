@@ -16,7 +16,7 @@ import { lndRestRuntime } from '../startos/lightningProbe.ts'
 const clnrest = {
   backend: 'clnrest' as const,
   address: '10.0.3.1:3010',
-  rune: 'restricted-rune',
+  rune: 'cln-rune',
 }
 
 const lndrest = {
@@ -60,7 +60,7 @@ test('builds only the CLNRest environment for CLN', () => {
   assert.equal(env.MINT_LISTEN_PORT, '3338')
   assert.equal(env.MINT_BACKEND_BOLT11_SAT, 'CLNRestWallet')
   assert.equal(env.MINT_CLNREST_URL, 'http://10.0.3.1:3010')
-  assert.equal(env.MINT_CLNREST_RUNE, 'restricted-rune')
+  assert.equal(env.MINT_CLNREST_RUNE, 'cln-rune')
   assert.equal('MINT_LND_REST_ENDPOINT' in env, false)
   assert.equal('MINT_LND_REST_CERT' in env, false)
   assert.equal('MINT_LND_REST_MACAROON' in env, false)

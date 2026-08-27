@@ -4,9 +4,13 @@
 
 **Goal:** Add a one-time, backed-up CLN-or-LND REST selection to the Nutshell StartOS wrapper while preserving legacy CLN mints and failing closed without backend fallback.
 
-**Architecture:** Store only `clnrest` or `lndrest` in a wrapper-owned `store.json` on a new `startos` volume. A hidden critical-task action validates the exact selected runtime connection, then serializes its final state re-read and merge with a module-scoped mutex; dependency setup, bridge and interface resolution, ephemeral runtime credential preparation, and Nutshell environment construction then use only that value. Existing `0.20.3:0` installations migrate to locked CLN.
+**Architecture:** Store only `clnrest` or `lndrest` in a wrapper-owned `store.json` on a new `startos` volume. A hidden critical-task action validates the exact selected runtime connection, then serializes its final state re-read and merge with a module-scoped mutex; dependency setup, bridge and interface resolution, ephemeral runtime credential preparation, and Nutshell environment construction then use only that value. The released Community `0.20.3:1` remains in the version graph, and its installations migrate to locked CLN in `0.20.3:2`.
 
 **Tech Stack:** TypeScript 6, `@start9labs/start-sdk` 2.0.9, `cln-startos`, `lnd-startos`, Node test runner, official `cashubtc/nutshell:0.20.3` image, `start-cli`, Make/s9pk.
+
+**Sync Baseline:** Community `main` at
+`bb48542b91fcf22e3e70059433ed86310ee9f7ce` (`v0.20.3_1`), merged with
+history preserved before the LND candidate advanced to `0.20.3:2`.
 
 ---
 
@@ -155,20 +159,21 @@ exist.
 
 **Step 3: Implement the version graph and backup changes**
 
-- Move the existing `0.20.3:0` `VersionInfo` unchanged into
-  `startos/versions/v0_20_3_0.ts`.
-- Make `startos/versions/current.ts` version `0.20.3:1`.
+- Keep the existing `0.20.3:0` historical `VersionInfo` unchanged.
+- Copy the exact released Community `0.20.3:1` five-locale notes and no-op
+  migration into `startos/versions/v0_20_3_1.ts`.
+- Make `startos/versions/current.ts` version `0.20.3:2`.
 - In its upward migration, merge
   `{ lightningBackend: legacyLightningBackend() }` into `storeJson`.
 - Keep downgrade `IMPOSSIBLE`.
-- Include `v_0_20_3_0` in `VersionGraph.other`.
+- Include both `v_0_20_3_0` and `v_0_20_3_1` in `VersionGraph.other`.
 - Seed `storeJson` with `{}` on every init without overwriting an existing
   backend.
 - Back up both volumes with `sdk.Backups.ofVolumes('main', 'startos')`.
 
-Fresh installs do not run the `0.20.3:0 -> 0.20.3:1` migration, so their state
-remains unselected. Legacy updates and legacy restores do run it and become
-locked CLN.
+Fresh installs do not run the `0.20.3:1 -> 0.20.3:2` migration, so their state
+remains unselected. Updates from the released Community package, older updates,
+and legacy restores do run the graph and become locked CLN.
 
 **Step 4: Verify**
 
@@ -327,6 +332,12 @@ In `lightningConnection.ts`:
 
 - CLN: import `clnrestPort`; resolve package `c-lightning`, host `clnrest`,
   `ssl: false`; read and decode `rune` from the CLNRest interface suffix.
+  One-shot validation must reject a missing suffix. For the reactive runtime
+  suffix watch only, use the equality comparator
+  `(previous, next) => next === null || previous === next` so a temporary null
+  during rune rotation retains the previous rune. A changed nonmatching suffix
+  must re-run parsing and fail closed; address loss remains independently
+  reactive and must also fail closed.
 - LND: import `controlHostId`, `lndconnectRestId`, and `restPort` from
   `lnd-startos/startos/interfaces`; resolve package `lnd`, control host, REST
   port, with `ssl` omitted because that binding publishes one TLS address.
@@ -538,6 +549,10 @@ At startup:
    subcontainer before rethrowing any preparation failure.
 7. Pass the discriminated connection to `buildMintEnvironment`.
 
+For CLN, reactively resolve the address and rune suffix separately. Suppress
+only a temporary `null` rune suffix or an equal value, preserving the last rune
+during rotation; do not suppress address loss or a changed malformed suffix.
+
 Keep the existing mint port health check. If resolution or credentials fail,
 throw before creating the daemon. Never branch to the other backend.
 
@@ -587,13 +602,15 @@ Document:
 - explicit one-time CLN or LND choice;
 - permanent lock and financial reason for it;
 - existing upgrades automatically remaining CLN;
-- CLNRest enablement and restricted rune;
+- default-enabled CLNRest remaining enabled, its highly privileged rune, and
+  the temporary reactive-null rotation behavior;
 - LND on the same StartOS system, proxy-terminated internal HTTPS REST,
   StartOS-root verification, masked interface credential delivery, ephemeral
-  credential file, and admin-macaroon privilege;
+  credential file, and highly privileged admin-macaroon handling;
 - no manual credential copy;
 - fail-closed same-backend recovery;
-- backup/restore preservation;
+- backup/restore preservation and isolated restore testing that never runs or
+  exposes the original and restored mint simultaneously;
 - public mint exposure remaining independent and compatible with LAN, Tor,
   domains, and Start Tunnel;
 - x86 device evidence and ARM build-only evidence requirements in UPDATING.
@@ -670,7 +687,7 @@ sha256sum nutshell_x86_64.s9pk
 
 If the Makefile emits a different artifact name, resolve it with
 `find . -maxdepth 1 -name '*.s9pk' -type f` and use the exact path. Verify ID
-`nutshell`, version `0.20.3:1`, architecture `x86_64`, both optional manifest
+`nutshell`, version `0.20.3:2`, architecture `x86_64`, both optional manifest
 dependencies, and the reviewed image digest.
 
 **Step 4: Commit formatting-only source changes**
@@ -717,10 +734,10 @@ return to systematic debugging/design review.
 - Fresh LND selection and startup.
 - Both nodes installed; stop the selected node and verify no fallback.
 - Restart and verify the lock persists.
-- Upgrade a disposable `0.20.3:0` CLN installation and verify locked CLN plus
+- Upgrade a disposable released `0.20.3:1` CLN installation and verify locked CLN plus
   preserved seed/database identity.
-- Backup, uninstall/reinstall, restore, and verify the same backend remains
-  locked.
+- Backup, uninstall/reinstall, and verify the same backend remains locked on an
+  isolated restore system; never run or expose the original concurrently.
 - Confirm the mint interface remains available through the configured StartOS
   exposure, including Start Tunnel when used.
 - Use a clean reinstall or VM snapshot between backend paths.
