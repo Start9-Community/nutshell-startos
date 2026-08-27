@@ -9,6 +9,7 @@ import {
   legacyLightningBackendState,
   lockLightningBackend,
   migrateLegacyLightningBackend,
+  validateThenLock,
 } from '../startos/lightningBackend.ts'
 
 test('declares no dependency while the backend is unselected', () => {
@@ -117,4 +118,111 @@ test('accepts LND as valid runtime state', () => {
 test('rejects missing and unknown runtime state', () => {
   assert.throws(() => assertLightningBackend(undefined), /not selected/i)
   assert.throws(() => assertLightningBackend('fake'), /invalid/i)
+})
+
+test('validates before persisting the first backend selection', async () => {
+  const events: string[] = []
+
+  await validateThenLock(
+    undefined,
+    'lndrest',
+    async (backend) => {
+      events.push(`validate:${backend}`)
+    },
+    async (state) => {
+      events.push(`persist:${state.lightningBackend}`)
+    },
+    async () => {
+      events.push('re-read')
+      return undefined
+    },
+  )
+
+  assert.deepEqual(events, ['validate:lndrest', 're-read', 'persist:lndrest'])
+})
+
+test('does not persist when backend validation fails', async () => {
+  let persistCalls = 0
+
+  await assert.rejects(
+    validateThenLock(
+      undefined,
+      'lndrest',
+      async () => {
+        throw new Error('probe failed')
+      },
+      async () => {
+        persistCalls += 1
+      },
+      async () => undefined,
+    ),
+    /probe failed/,
+  )
+
+  assert.equal(persistCalls, 0)
+})
+
+test('refuses a second selection before validation', async () => {
+  let validateCalls = 0
+  let persistCalls = 0
+
+  await assert.rejects(
+    validateThenLock(
+      'clnrest',
+      'lndrest',
+      async () => {
+        validateCalls += 1
+      },
+      async () => {
+        persistCalls += 1
+      },
+      async () => undefined,
+    ),
+    /already locked/i,
+  )
+
+  assert.equal(validateCalls, 0)
+  assert.equal(persistCalls, 0)
+})
+
+test('fails closed when the wrapper state file is unavailable', async () => {
+  let validateCalls = 0
+  let persistCalls = 0
+
+  await assert.rejects(
+    validateThenLock(
+      null,
+      'clnrest',
+      async () => {
+        validateCalls += 1
+      },
+      async () => {
+        persistCalls += 1
+      },
+      async () => undefined,
+    ),
+    /invalid/i,
+  )
+
+  assert.equal(validateCalls, 0)
+  assert.equal(persistCalls, 0)
+})
+
+test('does not overwrite a selection committed during validation', async () => {
+  let persistCalls = 0
+
+  await assert.rejects(
+    validateThenLock(
+      undefined,
+      'lndrest',
+      async () => {},
+      async () => {
+        persistCalls += 1
+      },
+      async () => 'clnrest',
+    ),
+    /already locked/i,
+  )
+
+  assert.equal(persistCalls, 0)
 })

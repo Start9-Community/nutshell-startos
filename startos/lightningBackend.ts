@@ -55,11 +55,27 @@ export function assertLightningBackend(
 }
 
 export function lockLightningBackend(
-  current: LightningBackend | undefined,
+  current: LightningBackend | null | undefined,
   requested: LightningBackend,
 ) {
+  if (current === null) {
+    throw new Error('Stored Lightning backend state is invalid')
+  }
   if (current !== undefined) {
     throw new Error(`Lightning backend is already locked to ${current}`)
   }
   return { lightningBackend: requested }
+}
+
+export async function validateThenLock(
+  current: LightningBackend | null | undefined,
+  requested: LightningBackend,
+  validate: (backend: LightningBackend) => Promise<unknown>,
+  persist: (state: { lightningBackend: LightningBackend }) => Promise<unknown>,
+  readCurrent: () => Promise<LightningBackend | null | undefined>,
+) {
+  const state = lockLightningBackend(current, requested)
+  await validate(requested)
+  lockLightningBackend(await readCurrent(), requested)
+  await persist(state)
 }
