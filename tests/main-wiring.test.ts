@@ -108,6 +108,17 @@ test('selected connection resolution applies its requested read mode', () => {
     1,
   )
   assert.equal(callsNamed(lnd, 'parseLndRestMacaroonSuffix').length, 1)
+  assert.equal(callsNamed(cln, 'parseClnRestRuneSuffix').length, 1)
+
+  const clnHostReads = callsNamed(cln, 'get').filter((call) =>
+    call.expression.getText(source).startsWith('sdk.host.'),
+  )
+  const suffixRead = clnHostReads.find((call) => call.arguments.length === 4)
+  assert.ok(suffixRead)
+  assert.equal(
+    suffixRead.arguments[3]?.getText(source),
+    "readMode === 'reactive' ? suppressTemporaryClnRuneGap : undefined",
+  )
 
   const modeParameter = selected.parameters.find(
     (parameter) => parameter.name.getText(source) === 'readMode',

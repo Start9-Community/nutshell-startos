@@ -3,7 +3,7 @@ import { storeJson } from '../fileModels/store.json'
 import { migrateLegacyLightningBackend } from '../lightningBackend'
 
 export const current = VersionInfo.of({
-  version: '0.20.3:1',
+  version: '0.20.3:2',
   releaseNotes: {
     en_US:
       'Adds one-time Lightning backend selection between Core Lightning (CLNRest) and LND (REST). Existing mints are locked to CLN during update; fresh installations choose once and cannot switch afterward.',

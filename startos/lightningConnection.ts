@@ -18,11 +18,13 @@ import {
 import {
   type ConnectionReadMode,
   endpointForConnection,
+  parseClnRestRuneSuffix,
   parseLndRestMacaroonSuffix,
   prepareRuntimeCredentials,
   readConnectionValue,
   type ResolvedLightningConnection,
   selectedRuntimeForConnection,
+  suppressTemporaryClnRuneGap,
 } from './lightningRuntime'
 import { sdk } from './sdk'
 import { clnrestHostId, clnrestInterfaceId } from './utils'
@@ -53,28 +55,15 @@ async function resolveClnConnection(
       (host) =>
         host?.bindings[clnrestPort]?.interfaces[clnrestInterfaceId]?.addressInfo
           .suffix ?? null,
+      readMode === 'reactive' ? suppressTemporaryClnRuneGap : undefined,
     ),
     readMode,
   )
-  const encodedRune = suffix?.match(/[?&]rune=([^&]*)/)?.[1]
-  if (!encodedRune) {
-    throw new Error('Selected Core Lightning CLNRest rune is unavailable')
-  }
-
-  let credential: string
-  try {
-    credential = decodeURIComponent(encodedRune)
-  } catch {
-    throw new Error('Selected Core Lightning CLNRest rune is invalid')
-  }
-  if (!credential) {
-    throw new Error('Selected Core Lightning CLNRest rune is empty')
-  }
 
   return {
     backend: 'clnrest',
     address,
-    rune: credential,
+    rune: parseClnRestRuneSuffix(suffix),
   }
 }
 

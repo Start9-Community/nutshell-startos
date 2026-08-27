@@ -5,11 +5,13 @@ import {
   backendDisplayName,
   endpointForConnection,
   mountPolicyForBackend,
+  parseClnRestRuneSuffix,
   parseLndRestMacaroonSuffix,
   prepareRuntimeCredentials,
   prepareSubcontainerOrDestroy,
   readConnectionValue,
   resolveSelectedRuntime,
+  suppressTemporaryClnRuneGap,
 } from '../startos/lightningRuntime.ts'
 import { lightningBackends } from '../startos/lightningBackendState.mjs'
 import { lndRestRuntime } from '../startos/lndRestRuntime.mjs'
@@ -40,6 +42,28 @@ test('mounts no LND dependency volume for LND', () => {
     },
     dependencies: [],
   })
+})
+
+test('reactive CLN suffix watch suppresses only equality and temporary null', () => {
+  assert.equal(suppressTemporaryClnRuneGap('?rune=old', null), true)
+  assert.equal(suppressTemporaryClnRuneGap('?rune=old', '?rune=old'), true)
+  assert.equal(
+    suppressTemporaryClnRuneGap('?rune=old', '?rune=replacement'),
+    false,
+  )
+  assert.equal(suppressTemporaryClnRuneGap('?rune=old', '?other=value'), false)
+})
+
+test('one-shot CLN validation rejects a missing or nonmatching rune suffix', () => {
+  assert.throws(() => parseClnRestRuneSuffix(null), /rune.*unavailable/i)
+  assert.throws(
+    () => parseClnRestRuneSuffix('?other=value'),
+    /rune.*unavailable/i,
+  )
+  assert.equal(
+    parseClnRestRuneSuffix('?rune=application-rune'),
+    'application-rune',
+  )
 })
 
 test('decodes one canonical base64url macaroon from the LND interface suffix', () => {

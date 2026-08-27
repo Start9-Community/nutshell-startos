@@ -28,6 +28,13 @@ export function readConnectionValue<T>(
   return mode === 'reactive' ? value.const() : value.once()
 }
 
+export function suppressTemporaryClnRuneGap(
+  previous: string | null,
+  next: string | null,
+) {
+  return next === null || previous === next
+}
+
 const mainMount = {
   volumeId: 'main',
   subpath: null,
@@ -94,6 +101,24 @@ function assertConnection(
   ) {
     throw new Error('Selected LND REST macaroon is empty')
   }
+}
+
+export function parseClnRestRuneSuffix(suffix: string | null | undefined) {
+  const encodedRune = suffix?.match(/[?&]rune=([^&]*)/)?.[1]
+  if (!encodedRune) {
+    throw new Error('Selected Core Lightning CLNRest rune is unavailable')
+  }
+
+  let rune: string
+  try {
+    rune = decodeURIComponent(encodedRune)
+  } catch {
+    throw new Error('Selected Core Lightning CLNRest rune is invalid')
+  }
+  if (!rune) {
+    throw new Error('Selected Core Lightning CLNRest rune is empty')
+  }
+  return rune
 }
 
 export function parseLndRestMacaroonSuffix(suffix: string | null | undefined) {
