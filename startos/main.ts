@@ -8,6 +8,7 @@ import { selectStartOsRootCa } from './lightningProbe'
 import {
   mountPolicyForBackend,
   prepareRuntimeCredentials,
+  prepareSubcontainerOrDestroy,
   resolveSelectedRuntime,
 } from './lightningRuntime'
 import { buildMintEnvironment, MINT_PORT } from './mintEnvironment'
@@ -50,21 +51,20 @@ export const main = sdk.setupMain(async ({ effects }) => {
     'nutshell-sub',
   )
 
-  try {
-    await prepareRuntimeCredentials(runtime, rootCa, {
-      writeFile: (path, contents) => subcontainer.writeFile(path, contents),
-      requireNonemptyFile: async (path) => {
-        try {
-          await subcontainer.execFail(['test', '-s', path])
-        } catch {
-          throw new Error('Selected LND REST macaroon is unavailable')
-        }
-      },
-    })
-  } catch (error) {
-    await subcontainer.destroy()
-    throw error
-  }
+  await prepareSubcontainerOrDestroy(
+    () =>
+      prepareRuntimeCredentials(runtime, rootCa, {
+        writeFile: (path, contents) => subcontainer.writeFile(path, contents),
+        requireNonemptyFile: async (path) => {
+          try {
+            await subcontainer.execFail(['test', '-s', path])
+          } catch {
+            throw new Error('Selected LND REST macaroon is unavailable')
+          }
+        },
+      }),
+    () => subcontainer.destroy(),
+  )
 
   return sdk.Daemons.of(effects).addDaemon('primary', {
     subcontainer,

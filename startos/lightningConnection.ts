@@ -3,7 +3,10 @@ import { clnrestPort } from 'cln-startos/startos/utils'
 import { controlHostId, restPort } from 'lnd-startos/startos/interfaces'
 import type { manifest as lndManifest } from 'lnd-startos/startos/manifest'
 import { i18n } from './i18n'
-import { LightningBackend } from './lightningBackend'
+import {
+  assertLightningBackend,
+  type LightningBackend,
+} from './lightningBackend'
 import {
   buildProbeSpec,
   lndRestRuntime,
@@ -98,9 +101,13 @@ export function resolveLightningConnection(
   backend: LightningBackend,
   readMode: ConnectionReadMode = 'one-shot',
 ) {
-  return backend === 'clnrest'
-    ? resolveClnConnection(effects, readMode)
-    : resolveLndConnection(effects, readMode)
+  assertLightningBackend(backend)
+  switch (backend) {
+    case 'clnrest':
+      return resolveClnConnection(effects, readMode)
+    case 'lndrest':
+      return resolveLndConnection(effects, readMode)
+  }
 }
 
 function probeMounts(backend: LightningBackend) {

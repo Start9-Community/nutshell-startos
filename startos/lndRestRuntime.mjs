@@ -6,7 +6,8 @@ export const lndRestRuntime = Object.freeze({
 export const lndDependencyMount = Object.freeze({
   dependencyId: 'lnd',
   volumeId: 'main',
-  subpath: null,
-  mountpoint: '/mnt/lnd',
+  subpath: 'data/chain/bitcoin/mainnet/admin.macaroon',
+  mountpoint: lndRestRuntime.macaroon,
+  type: 'file',
   readonly: true,
 })

@@ -63,8 +63,9 @@ test('only LND receives the exact read-only macaroon mount and proxy trust', () 
       {
         dependencyId: 'lnd',
         volumeId: 'main',
-        subpath: null,
-        mountpoint: '/mnt/lnd',
+        subpath: 'data/chain/bitcoin/mainnet/admin.macaroon',
+        mountpoint: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
+        type: 'file',
         readonly: true,
       },
     ],

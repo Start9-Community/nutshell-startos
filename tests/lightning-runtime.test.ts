@@ -6,10 +6,16 @@ import {
   endpointForConnection,
   mountPolicyForBackend,
   prepareRuntimeCredentials,
+  prepareSubcontainerOrDestroy,
   readConnectionValue,
   resolveSelectedRuntime,
 } from '../startos/lightningRuntime.ts'
+import { lightningBackends } from '../startos/lightningBackendState.mjs'
 import { lndRestRuntime } from '../startos/lndRestRuntime.mjs'
+
+test('runtime accepts exactly the two supported backend identifiers', () => {
+  assert.deepEqual(lightningBackends, ['clnrest', 'lndrest'])
+})
 
 test('mounts only the writable mint volume for CLN', () => {
   assert.deepEqual(mountPolicyForBackend('clnrest'), {
@@ -23,7 +29,7 @@ test('mounts only the writable mint volume for CLN', () => {
   })
 })
 
-test('adds only the read-only LND data mount for LND', () => {
+test('mounts only the read-only LND admin macaroon file for LND', () => {
   assert.deepEqual(mountPolicyForBackend('lndrest'), {
     main: {
       volumeId: 'main',
@@ -35,8 +41,9 @@ test('adds only the read-only LND data mount for LND', () => {
       {
         dependencyId: 'lnd',
         volumeId: 'main',
-        subpath: null,
-        mountpoint: '/mnt/lnd',
+        subpath: 'data/chain/bitcoin/mainnet/admin.macaroon',
+        mountpoint: '/mnt/lnd/data/chain/bitcoin/mainnet/admin.macaroon',
+        type: 'file',
         readonly: true,
       },
     ],
@@ -159,6 +166,18 @@ test('rejects pre-schemed bridge addresses instead of double-prefixing them', as
   )
 })
 
+test('rejects connections outside the exact runtime backend allowlist', () => {
+  assert.throws(
+    () =>
+      endpointForConnection({
+        // @ts-expect-error Exercise corrupt runtime input at the JS boundary.
+        backend: 'invalid',
+        address: '10.0.3.1:8080',
+      }),
+    /invalid/i,
+  )
+})
+
 test('prepares LND credentials in the daemon subcontainer before use', async () => {
   const events: string[] = []
   const runtime = await resolveSelectedRuntime('lndrest', async () => ({
@@ -220,6 +239,56 @@ test('does not prepare dependency credentials for CLN', async () => {
   })
 
   assert.equal(ioCalls, 0)
+})
+
+test('rejects invalid backend state before preparing credentials', async () => {
+  let ioCalls = 0
+
+  await assert.rejects(
+    prepareRuntimeCredentials(
+      {
+        connection: {
+          // @ts-expect-error Exercise corrupt runtime input at the JS boundary.
+          backend: 'invalid',
+          address: '10.0.3.1:8080',
+        },
+        mounts: mountPolicyForBackend('lndrest'),
+        requiresRootCa: true,
+      },
+      'root-ca',
+      {
+        writeFile: async () => {
+          ioCalls += 1
+        },
+        requireNonemptyFile: async () => {
+          ioCalls += 1
+        },
+      },
+    ),
+    /invalid/i,
+  )
+
+  assert.equal(ioCalls, 0)
+})
+
+test('destroys a prepared subcontainer before rethrowing preparation failure', async () => {
+  const events: string[] = []
+  const failure = new Error('credential preparation failed')
+
+  await assert.rejects(
+    prepareSubcontainerOrDestroy(
+      async () => {
+        events.push('prepare')
+        throw failure
+      },
+      async () => {
+        events.push('destroy')
+      },
+    ),
+    (error) => error === failure,
+  )
+
+  assert.deepEqual(events, ['prepare', 'destroy'])
 })
 
 test('reactive runtime reads subscribe without performing a one-shot read', async () => {

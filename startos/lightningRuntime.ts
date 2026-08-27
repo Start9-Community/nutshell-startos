@@ -21,17 +21,34 @@ const mainMount = {
   readonly: false,
 } as const
 
+function unsupportedLightningBackend(backend: never): never {
+  throw new Error(`Stored Lightning backend is invalid: ${String(backend)}`)
+}
+
 export function mountPolicyForBackend(backend: unknown) {
   assertLightningBackend(backend)
 
-  return backend === 'clnrest'
-    ? ({ main: mainMount, dependencies: [] } as const)
-    : ({ main: mainMount, dependencies: [lndDependencyMount] } as const)
+  switch (backend) {
+    case 'clnrest':
+      return { main: mainMount, dependencies: [] } as const
+    case 'lndrest':
+      return { main: mainMount, dependencies: [lndDependencyMount] } as const
+    default:
+      return unsupportedLightningBackend(backend)
+  }
 }
 
 export function backendDisplayName(backend: unknown) {
   assertLightningBackend(backend)
-  return backend === 'clnrest' ? 'CLNRestWallet' : 'LndRestWallet'
+
+  switch (backend) {
+    case 'clnrest':
+      return 'CLNRestWallet'
+    case 'lndrest':
+      return 'LndRestWallet'
+    default:
+      return unsupportedLightningBackend(backend)
+  }
 }
 
 function assertRawAddress(address: string) {
@@ -61,8 +78,17 @@ function assertConnection(
 
 export function endpointForConnection(connection: MintLightningConnection) {
   assertRawAddress(connection.address)
-  const scheme = connection.backend === 'clnrest' ? 'http' : 'https'
-  return `${scheme}://${connection.address}`
+  const backend: unknown = connection.backend
+  assertLightningBackend(backend)
+
+  switch (backend) {
+    case 'clnrest':
+      return `http://${connection.address}`
+    case 'lndrest':
+      return `https://${connection.address}`
+    default:
+      return unsupportedLightningBackend(backend)
+  }
 }
 
 export async function resolveSelectedRuntime(
@@ -90,7 +116,16 @@ export async function prepareRuntimeCredentials(
   rootCa: string | null,
   access: RuntimeCredentialAccess,
 ) {
-  if (runtime.connection.backend === 'clnrest') return
+  const backend: unknown = runtime.connection.backend
+  assertLightningBackend(backend)
+  switch (backend) {
+    case 'clnrest':
+      return
+    case 'lndrest':
+      break
+    default:
+      return unsupportedLightningBackend(backend)
+  }
 
   if (!rootCa?.trim()) {
     throw new Error('StartOS root CA is unavailable')
@@ -98,4 +133,16 @@ export async function prepareRuntimeCredentials(
 
   await access.writeFile(lndRestRuntime.rootCaPath, rootCa)
   await access.requireNonemptyFile(lndRestRuntime.macaroon)
+}
+
+export async function prepareSubcontainerOrDestroy<T>(
+  prepare: () => Promise<T>,
+  destroy: () => Promise<unknown>,
+) {
+  try {
+    return await prepare()
+  } catch (error) {
+    await destroy()
+    throw error
+  }
 }

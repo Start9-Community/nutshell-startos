@@ -164,6 +164,30 @@ test('main prepares LND trust and credentials in the daemon subcontainer', () =>
     ).expression.getText(source),
     'subcontainer',
   )
+  assert.deepEqual(
+    credentialChecks[0].arguments[0] &&
+      ts.isArrayLiteralExpression(credentialChecks[0].arguments[0])
+      ? credentialChecks[0].arguments[0].elements.map((element) =>
+          element.getText(source),
+        )
+      : null,
+    ["'test'", "'-s'", 'path'],
+  )
+
+  const lifecycleCalls = callsNamed(source, 'prepareSubcontainerOrDestroy')
+  assert.equal(lifecycleCalls.length, 1)
+  const prepareStep = lifecycleCalls[0].arguments[0]
+  const destroyStep = lifecycleCalls[0].arguments[1]
+  assert.ok(
+    prepareStep &&
+      ts.isArrowFunction(prepareStep) &&
+      callsNamed(prepareStep, 'prepareRuntimeCredentials').length === 1,
+  )
+  assert.ok(
+    destroyStep &&
+      ts.isArrowFunction(destroyStep) &&
+      callsNamed(destroyStep, 'destroy').length === 1,
+  )
 
   const daemonCalls = callsNamed(source, 'addDaemon')
   assert.equal(daemonCalls.length, 1)
