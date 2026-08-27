@@ -1,9 +1,12 @@
 export const lightningBackends = ['clnrest', 'lndrest'] as const
 export type LightningBackend = (typeof lightningBackends)[number]
-export const backupVolumeIds = ['main', 'startos'] as const
 
 export function legacyLightningBackend(): LightningBackend {
   return 'clnrest'
+}
+
+export function legacyLightningBackendState() {
+  return { lightningBackend: legacyLightningBackend() }
 }
 
 export function assertLightningBackend(

@@ -1,6 +1,6 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 import { storeJson } from '../fileModels/store.json'
-import { legacyLightningBackend } from '../lightningBackend'
+import { legacyLightningBackendState } from '../lightningBackend'
 
 export const current = VersionInfo.of({
   version: '0.20.3:1',
@@ -14,13 +14,11 @@ export const current = VersionInfo.of({
     pl_PL:
       'Dodaje jednorazowy wybór backendu Lightning między Core Lightning (CLNRest) a LND (REST). Istniejące mennice zostaną podczas aktualizacji przypisane do CLN; nowe instalacje wybierają raz i nie mogą później zmienić wyboru.',
     fr_FR:
-      "Ajoute un choix unique du backend Lightning entre Core Lightning (CLNRest) et LND (REST). Les mints existants sont verrouillés sur CLN lors de la mise à jour ; les nouvelles installations choisissent une fois et ne peuvent plus changer ensuite.",
+      'Ajoute un choix unique du backend Lightning entre Core Lightning (CLNRest) et LND (REST). Les mints existants sont verrouillés sur CLN lors de la mise à jour ; les nouvelles installations choisissent une fois et ne peuvent plus changer ensuite.',
   },
   migrations: {
     up: async ({ effects }) => {
-      await storeJson.merge(effects, {
-        lightningBackend: legacyLightningBackend(),
-      })
+      await storeJson.merge(effects, legacyLightningBackendState())
     },
     down: IMPOSSIBLE,
   },
