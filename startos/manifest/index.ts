@@ -10,7 +10,7 @@ export const manifest = setupManifest({
   marketingUrl: 'https://cashu.space',
   donationUrl: null,
   description: { short, long },
-  volumes: ['main'],
+  volumes: ['main', 'startos'],
   images: {
     main: {
       // Digest-pinned so a rebuild reproduces the image that was tested; see
