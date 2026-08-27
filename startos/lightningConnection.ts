@@ -11,44 +11,44 @@ import {
   probeRuntimeForBackend,
   selectStartOsRootCa,
 } from './lightningProbe'
+import {
+  type ConnectionReadMode,
+  endpointForConnection,
+  readConnectionValue,
+} from './lightningRuntime'
+import type { MintLightningConnection } from './mintEnvironment'
 import { sdk } from './sdk'
 import { clnrestHostId, clnrestInterfaceId } from './utils'
 
-export type LightningConnection =
-  | {
-      backend: 'clnrest'
-      endpoint: string
-      credential: string
-    }
-  | {
-      backend: 'lndrest'
-      endpoint: string
-    }
+export type LightningConnection = MintLightningConnection
 
 async function resolveClnConnection(
   effects: T.Effects,
+  readMode: ConnectionReadMode,
 ): Promise<LightningConnection> {
-  const address = await sdk.host
-    .getBridgeAddress(effects, {
+  const address = await readConnectionValue(
+    sdk.host.getBridgeAddress(effects, {
       packageId: 'c-lightning',
       hostId: clnrestHostId,
       internalPort: clnrestPort,
       ssl: false,
-    })
-    .once()
+    }),
+    readMode,
+  )
   if (!address) {
     throw new Error('Selected Core Lightning CLNRest address is unavailable')
   }
 
-  const suffix = await sdk.host
-    .get(
+  const suffix = await readConnectionValue(
+    sdk.host.get(
       effects,
       { packageId: 'c-lightning', hostId: clnrestHostId },
       (host) =>
         host?.bindings[clnrestPort]?.interfaces[clnrestInterfaceId]?.addressInfo
           .suffix ?? null,
-    )
-    .once()
+    ),
+    readMode,
+  )
   const encodedRune = suffix?.match(/[?&]rune=([^&]*)/)?.[1]
   if (!encodedRune) {
     throw new Error('Selected Core Lightning CLNRest rune is unavailable')
@@ -66,38 +66,41 @@ async function resolveClnConnection(
 
   return {
     backend: 'clnrest',
-    endpoint: `http://${address}`,
-    credential,
+    address,
+    rune: credential,
   }
 }
 
 async function resolveLndConnection(
   effects: T.Effects,
+  readMode: ConnectionReadMode,
 ): Promise<LightningConnection> {
-  const address = await sdk.host
-    .getBridgeAddress(effects, {
+  const address = await readConnectionValue(
+    sdk.host.getBridgeAddress(effects, {
       packageId: 'lnd',
       hostId: controlHostId,
       internalPort: restPort,
-    })
-    .once()
+    }),
+    readMode,
+  )
   if (!address) {
     throw new Error('Selected LND REST address is unavailable')
   }
 
   return {
     backend: 'lndrest',
-    endpoint: `https://${address}`,
+    address,
   }
 }
 
 export function resolveLightningConnection(
   effects: T.Effects,
   backend: LightningBackend,
+  readMode: ConnectionReadMode = 'one-shot',
 ) {
   return backend === 'clnrest'
-    ? resolveClnConnection(effects)
-    : resolveLndConnection(effects)
+    ? resolveClnConnection(effects, readMode)
+    : resolveLndConnection(effects, readMode)
 }
 
 function probeMounts(backend: LightningBackend) {
@@ -114,8 +117,13 @@ async function runLightningProbe(
   const backend = connection.backend
   const spec =
     connection.backend === 'clnrest'
-      ? buildProbeSpec('clnrest', connection)
-      : buildProbeSpec('lndrest', connection)
+      ? buildProbeSpec('clnrest', {
+          endpoint: endpointForConnection(connection),
+          credential: connection.rune,
+        })
+      : buildProbeSpec('lndrest', {
+          endpoint: endpointForConnection(connection),
+        })
   const rootCa =
     backend === 'lndrest'
       ? selectStartOsRootCa(await sdk.getSslCertificate(effects, []).once())

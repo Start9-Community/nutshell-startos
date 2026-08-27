@@ -1,5 +1,5 @@
 import type { LightningBackend } from './lightningBackend'
-import { lndRestRuntime } from './lndRestRuntime.mjs'
+import { lndDependencyMount, lndRestRuntime } from './lndRestRuntime.mjs'
 
 export { lndRestRuntime } from './lndRestRuntime.mjs'
 
@@ -95,19 +95,11 @@ export function buildProbeSpec(
   }
 }
 
-const lndProbeMount = {
-  dependencyId: 'lnd',
-  volumeId: 'main',
-  subpath: null,
-  mountpoint: '/mnt/lnd',
-  readonly: true,
-} as const
-
 export function probeRuntimeForBackend(backend: LightningBackend) {
   return backend === 'clnrest'
     ? ({ mounts: [] } as const)
     : ({
-        mounts: [lndProbeMount],
+        mounts: [lndDependencyMount],
         tls: {
           source: 'startos-root-ca',
           rootCaPath: lndRestRuntime.rootCaPath,

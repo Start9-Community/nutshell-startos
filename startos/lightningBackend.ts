@@ -1,5 +1,14 @@
-export const lightningBackends = ['clnrest', 'lndrest'] as const
-export type LightningBackend = (typeof lightningBackends)[number]
+import {
+  assertLightningBackend,
+  lightningBackends,
+  type LightningBackend,
+} from './lightningBackendState.mjs'
+
+export {
+  assertLightningBackend,
+  lightningBackends,
+  type LightningBackend,
+} from './lightningBackendState.mjs'
 
 export function dependencyForBackend(backend: unknown) {
   assertLightningBackend(backend)
@@ -41,17 +50,6 @@ export async function migrateLegacyLightningBackend(
   ) => Promise<unknown>,
 ) {
   await writeState(legacyLightningBackendState())
-}
-
-export function assertLightningBackend(
-  value: unknown,
-): asserts value is LightningBackend {
-  if (value === undefined || value === null) {
-    throw new Error('Lightning backend is not selected')
-  }
-  if (!lightningBackends.includes(value as LightningBackend)) {
-    throw new Error('Stored Lightning backend is invalid')
-  }
 }
 
 export function lockLightningBackend(
