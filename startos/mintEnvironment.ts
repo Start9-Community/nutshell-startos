@@ -38,10 +38,18 @@ export type MintEnvironmentConfig = {
   }
 }
 
-export type ClnrestConnection = {
-  address: string
-  rune: string
-}
+export type LightningConnection =
+  | {
+      backend: 'clnrest'
+      address: string
+      rune: string
+    }
+  | {
+      backend: 'lndrest'
+      address: string
+      rootCaPath: string
+      macaroonPath: string
+    }
 
 /** Nutshell's internal HTTP listener. StartOS owns external addressing. */
 export const MINT_PORT = 3338
@@ -53,7 +61,7 @@ export const MINT_DATABASE = '/data/mint'
 export const buildMintEnvironment = (
   config: MintEnvironmentConfig | null,
   seed: string,
-  clnrest: ClnrestConnection,
+  lightning: LightningConnection,
 ): Record<string, string> => {
   const mintInfo = config?.mint_info
   const fees = config?.fees
@@ -65,9 +73,6 @@ export const buildMintEnvironment = (
       mintInfo?.description || 'A private Cashu ecash mint.',
     MINT_INFO_DESCRIPTION_LONG: mintInfo?.description_long ?? '',
     MINT_INFO_MOTD: mintInfo?.motd ?? '',
-    MINT_BACKEND_BOLT11_SAT: 'CLNRestWallet',
-    MINT_CLNREST_URL: `http://${clnrest.address}`,
-    MINT_CLNREST_RUNE: clnrest.rune,
     LIGHTNING_FEE_PERCENT: String(fees?.fee_percent ?? 0),
     LIGHTNING_RESERVE_FEE_MIN: String(fees?.fee_reserve_min ?? 100),
     MINT_DATABASE,
@@ -81,6 +86,23 @@ export const buildMintEnvironment = (
     MINT_GLOBAL_RATE_LIMIT_PER_MINUTE: String(
       advanced?.rate_limit_per_minute ?? 60,
     ),
+  }
+
+  switch (lightning.backend) {
+    case 'clnrest':
+      env.MINT_BACKEND_BOLT11_SAT = 'CLNRestWallet'
+      env.MINT_CLNREST_URL = `http://${lightning.address}`
+      env.MINT_CLNREST_RUNE = lightning.rune
+      break
+    case 'lndrest':
+      env.MINT_BACKEND_BOLT11_SAT = 'LndRestWallet'
+      env.MINT_LND_REST_ENDPOINT = `https://${lightning.address}`
+      env.MINT_LND_REST_CERT = lightning.rootCaPath
+      env.MINT_LND_REST_MACAROON = lightning.macaroonPath
+      env.MINT_LND_REST_CERT_VERIFY = 'true'
+      break
+    default:
+      throw new Error('Unsupported lightning backend')
   }
 
   if (mintInfo?.icon_url) env.MINT_INFO_ICON_URL = mintInfo.icon_url

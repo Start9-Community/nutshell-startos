@@ -66,6 +66,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
     exec: {
       command: ['poetry', 'run', 'mint'],
       env: buildMintEnvironment(config, String(seed), {
+        backend: 'clnrest',
         address: clnrestAddress,
         rune: decodeURIComponent(rune),
       }),
