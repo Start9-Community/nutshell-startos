@@ -145,10 +145,10 @@ test('migrates every legacy installation to locked CLN', () => {
 })
 ```
 
-Also add a source-level assertion that backups list both `main` and `startos`.
-Keep this assertion narrow by exporting `backupVolumeIds` from `backups.ts` only
-if it can stay SDK-free; otherwise test the pure constant from
-`lightningBackend.ts` and pass it into `sdk.Backups.ofVolumes(...)`.
+Also add source-level assertions for the compatibility-safe backup contract:
+only the legacy-required `main` volume is passed to `sdk.Backups.ofVolumes`,
+while backup and restore hooks optionally archive `startos/store.json` when it
+exists. This preserves restores made by the released one-volume package.
 
 **Step 2: Run and verify failure**
 
@@ -169,7 +169,9 @@ exist.
 - Include both `v_0_20_3_0` and `v_0_20_3_1` in `VersionGraph.other`.
 - Seed `storeJson` with `{}` on every init without overwriting an existing
   backend.
-- Back up both volumes with `sdk.Backups.ofVolumes('main', 'startos')`.
+- Keep `main` as the only required `sdk.Backups.ofVolumes` volume. Use hooks to
+  archive `startos/store.json` on backup and restore it when present, while
+  accepting legacy archives that do not contain wrapper state.
 
 Fresh installs do not run the `0.20.3:1 -> 0.20.3:2` migration, so their state
 remains unselected. Updates from the released Community package, older updates,
