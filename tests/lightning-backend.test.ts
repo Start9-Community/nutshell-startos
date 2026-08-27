@@ -2,11 +2,45 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   assertLightningBackend,
+  dependencyForBackend,
+  dependenciesForBackendState,
   legacyLightningBackend,
   legacyLightningBackendState,
   lockLightningBackend,
   migrateLegacyLightningBackend,
 } from '../startos/lightningBackend.ts'
+
+test('declares no dependency while the backend is unselected', () => {
+  assert.deepEqual(dependenciesForBackendState(undefined), {})
+})
+
+test('fails closed for corrupt stored backend state', () => {
+  assert.throws(() => dependenciesForBackendState('fake'), /invalid/i)
+})
+
+test('declares only CLN for a locked CLN mint', () => {
+  assert.deepEqual(dependencyForBackend('clnrest'), {
+    'c-lightning': {
+      kind: 'running',
+      versionRange: '>=26.6.6:1',
+      healthChecks: ['lightningd'],
+    },
+  })
+})
+
+test('declares only LND for a locked LND mint', () => {
+  assert.deepEqual(dependencyForBackend('lndrest'), {
+    lnd: {
+      kind: 'running',
+      versionRange: '>=0.21.2-beta:3',
+      healthChecks: ['lnd'],
+    },
+  })
+})
+
+test('refuses to declare dependencies for invalid backend state', () => {
+  assert.throws(() => dependencyForBackend('fake'), /invalid/i)
+})
 
 test('migrates every legacy installation to locked CLN', () => {
   assert.equal(legacyLightningBackend(), 'clnrest')

@@ -26,3 +26,5 @@ export const depClnDescription = {
   pl_PL: 'Rozlicza płatności Lightning stanowiące pokrycie mennicy.',
   fr_FR: 'Règle les paiements Lightning qui adossent le mint.',
 }
+
+export const depLndDescription = depClnDescription
