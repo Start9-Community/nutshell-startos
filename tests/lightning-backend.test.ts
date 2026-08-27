@@ -5,6 +5,7 @@ import {
   legacyLightningBackend,
   legacyLightningBackendState,
   lockLightningBackend,
+  migrateLegacyLightningBackend,
 } from '../startos/lightningBackend.ts'
 
 test('migrates every legacy installation to locked CLN', () => {
@@ -15,6 +16,16 @@ test('builds the locked CLN state written by legacy migrations', () => {
   assert.deepEqual(legacyLightningBackendState(), {
     lightningBackend: 'clnrest',
   })
+})
+
+test('writes locked CLN through the legacy migration callback', async () => {
+  let writtenState: unknown
+
+  await migrateLegacyLightningBackend(async (state) => {
+    writtenState = state
+  })
+
+  assert.deepEqual(writtenState, { lightningBackend: 'clnrest' })
 })
 
 test('locks an unselected mint to CLN', () => {

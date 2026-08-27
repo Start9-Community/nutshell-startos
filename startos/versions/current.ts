@@ -1,6 +1,6 @@
 import { IMPOSSIBLE, VersionInfo } from '@start9labs/start-sdk'
 import { storeJson } from '../fileModels/store.json'
-import { legacyLightningBackendState } from '../lightningBackend'
+import { migrateLegacyLightningBackend } from '../lightningBackend'
 
 export const current = VersionInfo.of({
   version: '0.20.3:1',
@@ -18,7 +18,9 @@ export const current = VersionInfo.of({
   },
   migrations: {
     up: async ({ effects }) => {
-      await storeJson.merge(effects, legacyLightningBackendState())
+      await migrateLegacyLightningBackend((state) =>
+        storeJson.merge(effects, state),
+      )
     },
     down: IMPOSSIBLE,
   },

@@ -9,6 +9,14 @@ export function legacyLightningBackendState() {
   return { lightningBackend: legacyLightningBackend() }
 }
 
+export async function migrateLegacyLightningBackend(
+  writeState: (
+    state: ReturnType<typeof legacyLightningBackendState>,
+  ) => Promise<unknown>,
+) {
+  await writeState(legacyLightningBackendState())
+}
+
 export function assertLightningBackend(
   value: unknown,
 ): asserts value is LightningBackend {
