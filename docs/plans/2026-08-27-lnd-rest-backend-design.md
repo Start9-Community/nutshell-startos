@@ -124,6 +124,14 @@ The certificate and macaroon are referenced in place. They are not copied into
 `store.json`, Nutshell configuration, task results, or logs. The LND volume is
 never mounted writable.
 
+LND's current REST binding uses StartOS SSL rewrapping. Therefore both the
+selection probe and the first x86 device test must use the exact runtime path:
+the resolved bridge endpoint, the read-only mounted `tls.cert`, certificate
+verification enabled, and the mounted admin macaroon. A successful build does
+not prove this certificate path. If the authenticated probe fails, stop and
+revisit the integration boundary; do not silently disable verification or lock
+the backend.
+
 LND's admin macaroon is more privileged than CLN's restricted rune. This is the
 credential documented by Nutshell for LND REST and used by existing StartOS
 integrations. Documentation must state this difference and the fact that the
