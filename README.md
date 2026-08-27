@@ -9,7 +9,7 @@
 > upstream documentation is accurate and fully applicable — see the
 > Documentation section of `instructions.md` for links.
 
-[Nutshell](https://github.com/cashubtc/nutshell) is a Cashu mint: a server that issues and redeems Chaumian ecash backed by Bitcoin, settling in and out over Lightning. This package runs the mint half against the operator's own Core Lightning node, with no upstream setup wizard and no credentials for the operator to copy between services.
+[Nutshell](https://github.com/cashubtc/nutshell) is a Cashu mint: a server that issues and redeems Chaumian ecash backed by Bitcoin, settling in and out over Lightning. This package runs the mint half against either Core Lightning over CLNRest or LND over REST on the same StartOS system. A fresh mint chooses one backend once; the wrapper validates and locks that choice without asking the operator to copy credentials between services.
 
 - **Upstream repo:** <https://github.com/cashubtc/nutshell>
 - **Wrapper repo:** <https://github.com/Start9-Community/nutshell-startos>
@@ -37,11 +37,11 @@
 
 The official upstream image, unmodified, in one subcontainer.
 
-| Property     | Value                                      |
-| ------------ | ------------------------------------------ |
-| Image        | `cashubtc/nutshell`, digest-pinned          |
-| Architecture | x86_64, aarch64                            |
-| Command      | `poetry run mint`                          |
+| Property     | Value                              |
+| ------------ | ---------------------------------- |
+| Image        | `cashubtc/nutshell`, digest-pinned |
+| Architecture | x86_64, aarch64                    |
+| Command      | `poetry run mint`                  |
 
 | Subcontainer   | Purpose                                       |
 | -------------- | --------------------------------------------- |
@@ -51,17 +51,20 @@ The image reference in the manifest carries both a tag and a `@sha256:` digest, 
 
 ## Volume and Data Layout
 
-One volume, mounted read/write, holding everything that cannot be recreated.
+The mint data and wrapper selection state are kept separately so old one-volume
+backups remain restorable.
 
-| Volume | Mount Point | Purpose                                              |
-| ------ | ----------- | ---------------------------------------------------- |
-| `main` | `/data`     | The mint database, the mint seed, and this package's settings |
+| Volume    | Mount Point | Purpose                                                    |
+| --------- | ----------- | ---------------------------------------------------------- |
+| `main`    | `/data`     | Mint database, mint seed, and operator settings            |
+| `startos` | Not mounted | Wrapper-owned, backed-up Lightning backend selection state |
 
-| Path                        | Written by | Holds                                          |
-| --------------------------- | ---------- | ---------------------------------------------- |
-| `mint/mint.sqlite3`         | Nutshell   | Keysets, proofs, quotes — the mint's ledger    |
-| `mint_private_key`          | Init       | The seed every issued proof derives from       |
-| `startos/config.yaml`       | Init and the actions | The operator settings this package owns |
+| Path                  | Volume    | Written by           | Holds                                       |
+| --------------------- | --------- | -------------------- | ------------------------------------------- |
+| `mint/mint.sqlite3`   | `main`    | Nutshell             | Keysets, proofs, quotes — the mint's ledger |
+| `mint_private_key`    | `main`    | Init                 | The seed every issued proof derives from    |
+| `startos/config.yaml` | `main`    | Init and the actions | Operator settings                           |
+| `store.json`          | `startos` | Migration or setup   | Locked `clnrest` or `lndrest` selection     |
 
 **The seed and the database are one unit.** The seed alone cannot tell you what has been issued, and the database alone cannot be spent against — a restore that pairs one with the other's counterpart makes outstanding ecash unredeemable. They live on the same volume and are backed up together for exactly that reason.
 
@@ -69,51 +72,93 @@ One volume, mounted read/write, holding everything that cannot be recreated.
 
 ## File Models
 
-One model, holding the settings the actions write.
+Two models hold the operator settings and the locked backend selection.
 
-| File                  | Format | Modelled          | Written by           |
-| --------------------- | ------ | ----------------- | -------------------- |
-| `startos/config.yaml` | YAML   | `FileHelper.yaml` | Init and the actions |
+| File                  | Volume    | Format | Modelled          | Written by                     |
+| --------------------- | --------- | ------ | ----------------- | ------------------------------ |
+| `startos/config.yaml` | `main`    | YAML   | `FileHelper.yaml` | Init and configuration actions |
+| `store.json`          | `startos` | JSON   | `FileHelper.json` | Migration or one-time setup    |
 
 It is seeded on every init kind by an empty `merge`, which fills in each field's default without disturbing a value already set. Its three groups — `mint_info`, `fees`, `advanced` — map one-to-one onto the three configuration actions, and the mapping into Nutshell's environment happens on every start in `startos/mintEnvironment.ts`.
 
-A hand edit to this file survives until an action rewrites the same group, but it will not reach the running mint until the service restarts, because the environment is built at start. Keys the wrapper does not model are preserved in the file and ignored.
+A hand edit to `config.yaml` survives until an action rewrites the same group, but it will not reach the running mint until the service restarts, because the environment is built at start. Keys the wrapper does not model are preserved in the file and ignored. Do not hand-edit `store.json`: changing Lightning wallets underneath an established mint can break its accounting and strand users' ecash.
 
 Nutshell itself reads no configuration file here — everything reaches it as environment. That has a consequence worth knowing: a setting is consumed at launch, so nothing takes effect until the daemon restarts, and there is no in-container config to inspect for drift. The environment the mint was started with is what `mintEnvironment.ts` produced from this file.
 
 ## Dependencies
 
-One, required.
+The manifest declares both Lightning packages optional because a mint uses
+exactly one. After setup, `setupDependencies` makes only the locked backend a
+running dependency.
 
-| Dependency          | Required | Health checks | Why                                                   |
-| ------------------- | -------- | ------------- | ----------------------------------------------------- |
-| Core Lightning (`c-lightning`) | Yes | `lightningd` | Creates and settles the Lightning invoices that back every deposit and redemption |
+| Dependency                     | Selected when | Health check | Why                                                         |
+| ------------------------------ | ------------- | ------------ | ----------------------------------------------------------- |
+| Core Lightning (`c-lightning`) | `clnrest`     | `lightningd` | Creates and settles the Lightning invoices backing the mint |
+| LND (`lnd`)                    | `lndrest`     | `lnd`        | Creates and settles the Lightning invoices backing the mint |
 
-No volume of Core Lightning's is mounted. The mint reaches it over the plaintext service bridge at the address `sdk.host.getBridgeAddress` resolves, and authenticates with the rune Core Lightning publishes as its CLNRest interface's `?rune=` query parameter — the only way a dependent can read that rune without mounting the volume it lives on.
+Neither Lightning dependency's volume is mounted.
 
-**CLNRest has to be enabled in Core Lightning's own config.** It is not on by default, and when it is off Core Lightning exports no `clnrest` interface at all, so neither the address nor the rune resolves. Nutshell refuses to start in that case rather than coming up with no Lightning backend.
+For Core Lightning, the mint uses the plaintext internal service bridge and
+authenticates with the restricted rune published in the CLNRest interface's
+`?rune=` suffix. **CLNRest has to be enabled in Core Lightning's own config.**
+It is not on by default; without it, the address and rune do not resolve and
+Nutshell fails closed.
+
+For LND, the mint uses the proxy-terminated HTTPS bridge and verifies the
+presented certificate with the StartOS root CA. The masked `lnd-connect-rest`
+interface supplies the base64url-encoded raw admin macaroon. The wrapper decodes
+it in memory and writes it with mode `0600` only inside the temporary or runtime
+Nutshell subcontainer. No dependency volume is mounted, and the operator does
+not copy a macaroon or certificate. The admin macaroon is more privileged than
+the restricted CLN rune; it is exposed only to the selected Nutshell
+subcontainer and never stored in wrapper state, logs, command arguments, or
+environment values.
+
+Both the Lightning node and Nutshell must be on the same StartOS system. Remote
+or LAN Lightning endpoints are not configurable.
 
 ## Network Access and Interfaces
 
 One interface, serving the Cashu API that wallets talk to.
 
-| Interface      | Id    | Type | Port | Description                        |
-| -------------- | ----- | ---- | ---- | ---------------------------------- |
-| Cashu Mint API | `api` | api  | 3338 | The Cashu API wallets connect to   |
+| Interface      | Id    | Type | Port | Description                      |
+| -------------- | ----- | ---- | ---- | -------------------------------- |
+| Cashu Mint API | `api` | api  | 3338 | The Cashu API wallets connect to |
 
-The mint speaks plain HTTP inside its container; StartOS terminates TLS and owns every external address. The interface is typed `api` rather than `ui` because it serves no browser UI — a wallet is the client. The listener is fixed and deliberately not configurable.
+The mint speaks plain HTTP inside its container; StartOS terminates TLS and owns every external address. The interface is typed `api` rather than `ui` because it serves no browser UI — a wallet is the client. The listener is fixed and deliberately not configurable. This public interface is independent from the internal Lightning dependency: operators can publish the mint over LAN, Tor, a domain, or Start Tunnel without changing how Nutshell reaches the selected node.
 
 ## Installation and First-Run Flow
 
-There is no wizard and nothing to copy by hand. Install Core Lightning first, enable CLNRest in its config, and start it; then install this.
+There are no credentials to copy by hand. Before installing Nutshell, install
+and start the Lightning node this mint will use on the same StartOS system:
 
-At install the package generates a 256-bit mint seed onto the volume and seeds `config.yaml` with defaults. On every start it resolves Core Lightning's bridge address and rune, builds the environment, and launches the mint. The defaults are a working mint — the configuration actions are for making it *yours*, not for making it run.
+- for Core Lightning, enable CLNRest and restart Core Lightning; or
+- for LND, initialize and unlock its wallet so the masked REST interface is
+  available.
 
-The one ordering constraint: Core Lightning must be running with CLNRest enabled before Nutshell will start. Nothing else about first run is manual.
+At install, the package generates a 256-bit mint seed, seeds `config.yaml` with
+defaults, and raises a critical **Select Lightning Backend** task. The hidden
+action behind that task authenticates to the exact selected node before writing
+`clnrest` or `lndrest` to `store.json`. Nutshell cannot start until validation
+succeeds.
+
+The selection is permanent because changing Lightning wallets underneath an
+established ecash mint can break its accounting and strand outstanding tokens.
+There is no switch or reset action and no fallback to the other node. Existing
+installations upgraded from `0.20.3:0` are automatically locked to CLN, which
+preserves the backend on which those mints were created.
+
+On every subsequent start, the wrapper reactively resolves only the selected
+backend's address and credentials, builds its environment, and launches the
+mint. Operator configuration actions make the mint yours; they do not alter the
+locked Lightning choice.
 
 ## Actions
 
-Four actions, all user-facing, and none of them required to get a working mint. All four take effect on the next restart, because Nutshell reads its settings from the environment at launch.
+Four ordinary actions remain available after setup. The hidden backend selector
+is exposed only through the critical first-run task and cannot be repeated after
+the choice is stored. Configuration changes take effect on the next restart,
+because Nutshell reads its settings from the environment at launch.
 
 ### Mint Info
 
@@ -139,39 +184,46 @@ A **Missing** seed on an install that has been running is the one result that is
 
 ## Tasks
 
-None. This package raises no tasks, so the service is never held on a prompt and its ordinary controls are always available.
+Fresh installations raise one critical **Select Lightning Backend** task. It
+holds the service until the selected node passes an authenticated probe and the
+choice is stored. The task is absent after selection and is not raised for
+existing installations migrated to locked CLN.
 
-The dependency on Core Lightning is enforced by StartOS's own dependency handling rather than by a task, and a Core Lightning without CLNRest enabled surfaces as a failed start with an explanatory error in the service log — not as a prompt.
+After selection, StartOS dependency handling and startup resolution enforce the
+locked node. An unavailable node or invalid credential stops Nutshell; it does
+not prompt for or inspect the other backend.
 
 ## Health Checks
 
 One check, on the only daemon.
 
-| Check     | Displayed    | Method                    |
-| --------- | ------------ | ------------------------- |
-| `primary` | "Cashu Mint" | Port 3338 is listening    |
+| Check     | Displayed    | Method                 |
+| --------- | ------------ | ---------------------- |
+| `primary` | "Cashu Mint" | Port 3338 is listening |
 
-A failure in the first seconds of a start is the mint opening its database; a failure that persists means it exited. The two causes worth checking in that order are Core Lightning — unreachable, or reachable with CLNRest disabled, both of which make `main.ts` throw before the daemon is created — and an upstream database migration that did not complete, which the service log reports directly.
+A failure in the first seconds of a start is the mint opening its database; a failure that persists means it exited. Check the selected Lightning dependency first: Core Lightning must be reachable with CLNRest enabled, while LND must be reachable with an initialized and unlocked wallet and a valid masked REST interface. Address, credential, certificate-root, or ephemeral-file failures stop startup before the daemon is created. An upstream database migration that did not complete is the other likely cause and is reported by the service log.
 
 Note the check's limit: a listening port proves the mint is serving, not that it can settle a payment. Only a real mint or melt proves the Lightning path.
 
 ## Backups and Restore
 
-The whole `main` volume is copied wholesale — `sdk.Backups.ofVolumes('main')`. Nothing is excluded and nothing is dumped-and-replayed, which for a mint is the only safe strategy: the database and the seed have to be captured as one consistent pair.
+The whole `main` volume is copied wholesale. Nothing is excluded and nothing is dumped-and-replayed, which for a mint is the only safe strategy: the database and the seed have to be captured as one consistent pair. A compatibility hook also copies `startos/store.json` when present, preserving the locked backend while allowing older one-volume backups with no wrapper state to restore.
 
-A restored instance needs nothing re-entered. The seed is on the volume, so init's existence check sees it and does **not** generate a new one — that check is the whole reason a restore is survivable. Core Lightning's address and rune are resolved fresh on every start, so a restore onto a server where Core Lightning has different ports needs no intervention.
+A restored instance needs no Lightning credential re-entered. The seed is on the volume, so init's existence check sees it and does **not** generate a new one — that check is the whole reason a restore is survivable. The stored backend remains authoritative, while its StartOS bridge address and exported credential are resolved fresh on every start. The same backend must be installed and ready on the restored StartOS system; Nutshell will not substitute the other node. A legacy CLN installation or backup with no wrapper state is migrated to locked CLN.
 
 What a restore cannot fix is a stale backup. Ecash issued after the backup exists in wallets but not in the restored ledger, and the mint will refuse those proofs. Back up after any period of real activity, not on a schedule chosen for a stateless service.
 
 ## Limitations and Differences
 
-1. **CLNRest is the only Lightning backend.** Upstream's FakeWallet, LNbits, LND, Spark and the rest are not exposed.
-2. **SQLite only.** Upstream's PostgreSQL option is not exposed.
-3. **The internal listener is fixed.** External addressing and TLS belong to StartOS; there are no bind-address or TLS settings.
-4. **Upstream management RPC, OIDC authentication, and the Redis cache are not exposed.**
-5. **Upstream database migrations run when the mint starts**, which can make a downgrade unsafe. Take a fresh backup before an upstream version bump.
-6. **No wallet.** Upstream ships a Cashu wallet alongside the mint; this package runs the mint only.
-7. **x86_64 and aarch64 only.** The upstream image publishes no riscv64.
+1. **The exposed Lightning backends are CLNRest and LND REST.** Upstream's FakeWallet, LNbits, Spark, and other Lightning backends are not available.
+2. **The backend cannot be switched after validation.** Create a genuinely fresh mint to use another Lightning wallet.
+3. **Lightning nodes must be on the same StartOS system.** Remote and LAN Lightning endpoints are not configurable; this does not restrict public mint exposure.
+4. **SQLite only.** Upstream's PostgreSQL option is not exposed.
+5. **The internal listener is fixed.** External addressing and TLS belong to StartOS; there are no bind-address or TLS settings.
+6. **Upstream management RPC, OIDC authentication, and the Redis cache are not exposed.**
+7. **Upstream database migrations run when the mint starts**, which can make a downgrade unsafe. Take a fresh backup before an upstream version bump.
+8. **No wallet.** Upstream ships a Cashu wallet alongside the mint; this package runs the mint only.
+9. **x86_64 and aarch64 only.** The upstream image publishes no riscv64.
 
 ---
 
@@ -187,8 +239,10 @@ subcontainers:
   - nutshell-sub # the only container
 volumes:
   main: /data
+  startos: not-mounted # wrapper store.json; copied by backup compatibility hook
 file_models:
   - startos/config.yaml # mint_info, fees, advanced
+  - store.json # locked lightningBackend: clnrest or lndrest
 startos_managed_env_vars:
   - MINT_DATABASE
   - MINT_LISTEN_HOST
@@ -197,6 +251,10 @@ startos_managed_env_vars:
   - MINT_BACKEND_BOLT11_SAT
   - MINT_CLNREST_URL
   - MINT_CLNREST_RUNE
+  - MINT_LND_REST_ENDPOINT
+  - MINT_LND_REST_CERT
+  - MINT_LND_REST_MACAROON
+  - MINT_LND_REST_CERT_VERIFY
   - MINT_INFO_NAME
   - MINT_INFO_DESCRIPTION
   - MINT_INFO_DESCRIPTION_LONG
@@ -215,15 +273,18 @@ startos_managed_env_vars:
   - MINT_RATE_LIMIT
   - MINT_GLOBAL_RATE_LIMIT_PER_MINUTE
 dependencies:
-  - c-lightning # required; health check "lightningd"; needs CLNRest enabled
+  - c-lightning # optional in manifest; selected CLN mint requires lightningd
+  - lnd # optional in manifest; selected LND mint requires lnd
 interfaces:
   api: { type: api, port: 3338 }
 actions:
+  - select-lightning-backend # hidden; only through first-run critical task
   - configure-mint-info
   - configure-fees
   - configure-advanced
   - show-mint-info
-tasks: []
+tasks:
+  - select-lightning-backend # fresh install only; disappears after lock
 health_checks:
   - primary # displayed "Cashu Mint"
 ```
