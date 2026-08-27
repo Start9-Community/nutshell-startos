@@ -28,6 +28,14 @@ test('refuses every second selection, including the same backend', () => {
   )
 })
 
+test('accepts CLN as valid runtime state', () => {
+  assert.doesNotThrow(() => assertLightningBackend('clnrest'))
+})
+
+test('accepts LND as valid runtime state', () => {
+  assert.doesNotThrow(() => assertLightningBackend('lndrest'))
+})
+
 test('rejects missing and unknown runtime state', () => {
   assert.throws(() => assertLightningBackend(undefined), /not selected/i)
   assert.throws(() => assertLightningBackend('fake'), /invalid/i)
