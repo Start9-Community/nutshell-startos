@@ -24,9 +24,7 @@ export function dependencyForBackend(backend: unknown) {
 }
 
 export function dependenciesForBackendState(backend: unknown) {
-  return backend === null || backend === undefined
-    ? ({} as const)
-    : dependencyForBackend(backend)
+  return backend === undefined ? ({} as const) : dependencyForBackend(backend)
 }
 
 export function legacyLightningBackend(): LightningBackend {

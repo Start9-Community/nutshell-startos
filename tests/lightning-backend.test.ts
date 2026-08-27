@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   assertLightningBackend,
@@ -14,8 +15,28 @@ test('declares no dependency while the backend is unselected', () => {
   assert.deepEqual(dependenciesForBackendState(undefined), {})
 })
 
+test('fails closed when stored backend state is null', () => {
+  assert.throws(
+    () => dependenciesForBackendState(null),
+    /not selected|invalid/i,
+  )
+})
+
 test('fails closed for corrupt stored backend state', () => {
   assert.throws(() => dependenciesForBackendState('fake'), /invalid/i)
+})
+
+test('reactively wires stored backend state into dependency selection', () => {
+  const source = readFileSync(
+    new URL('../startos/dependencies.ts', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(
+    source,
+    /storeJson\s*\.read\(\s*\(store\)\s*=>\s*store\.lightningBackend\s*\)\s*\.const\(effects\)/,
+  )
+  assert.match(source, /return dependenciesForBackendState\(backend\)/)
 })
 
 test('declares only CLN for a locked CLN mint', () => {
