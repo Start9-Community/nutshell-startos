@@ -1,10 +1,17 @@
 # Nutshell Cashu Mint
 
 > [!IMPORTANT]
-> **Install Core Lightning first and turn CLNRest on in its config.** Nutshell settles every deposit and redemption through it, and will not start without it. CLNRest is not enabled by default — switch it on in Core Lightning's own settings and restart it before you start Nutshell.
+> **Choose Core Lightning or LND once for a new mint.** The selected Lightning
+> backend is permanent after Nutshell validates it. Switching wallets underneath
+> an established mint can break its accounting and strand users' ecash, so there
+> is no switch, reset, or automatic fallback. Existing Nutshell installations
+> remain locked to Core Lightning when they update.
 
 > [!WARNING]
-> **You are holding other people's money.** A Cashu mint issues bearer tokens against Bitcoin you custody. If you lose the mint's seed or its database, the ecash your users hold cannot be redeemed — by you or by anyone. Back up early, back up after real activity, and confirm at least once that a backup restores.
+> **You are holding other people's money.** A Cashu mint issues bearer tokens
+> against Bitcoin you custody. If you lose the mint's seed or database, the
+> ecash your users hold cannot be redeemed. Back up early, back up after real
+> activity, and confirm at least once that a backup restores.
 
 ## Documentation
 
@@ -13,48 +20,110 @@
 
 ## What you get on StartOS
 
-- A running Cashu mint, wired to your own Core Lightning node. No credentials to copy and no configuration file to write — the two services find each other.
-- An address you hand to Cashu wallets. Your server manages every form of it, so the same mint is reachable on your LAN, over Tor, or on a domain, as you choose.
-- The mint's seed and database on one backed-up volume, so a single restore brings the whole mint back.
+- A Cashu mint connected to the Core Lightning or LND node you select on the
+  same StartOS system. The services exchange connection details automatically;
+  there is no rune, macaroon, certificate, or configuration file to copy.
+- An address for Cashu wallets. Public mint access is independent from the
+  internal Lightning connection, so you can expose the same mint over LAN, Tor,
+  a domain, or Start Tunnel as you choose.
+- The mint seed, database, settings, and locked backend in one backup flow, so
+  restoring preserves both the mint and its Lightning choice.
 
 ## Getting set up
 
-Nutshell starts with working defaults, so there is nothing you must configure to get a mint running. Do these in order:
+Nutshell starts with working mint defaults, but a fresh installation must lock
+one Lightning backend first:
 
-1. **Install and start Core Lightning, with CLNRest enabled.** Nutshell will not start until it can reach it.
-2. **Start Nutshell.** It generates its own mint seed on first install and comes up on the defaults.
-3. **Run *Mint Info*.** Give the mint a name and a description — this is what wallets show people before they trust it with money — and add whatever contact and policy links you want published. Do this before you share the address.
-4. **Run *Advanced Settings* if you want limits.** Per-deposit, per-redemption and total-balance ceilings all start unlimited. A new mint is a good place to be conservative.
-5. **Take a backup.** Then restore it somewhere and check the mint comes back.
+1. **Choose the node this mint will use permanently.** Changing it later
+   requires creating a genuinely fresh Nutshell mint.
+2. **Install and start that node on the same StartOS system.**
+   - For **Core Lightning**, ensure the supported package's default-enabled
+     CLNRest setting remains enabled, then restart it after any related change.
+   - For **LND**, initialize and unlock its wallet so its REST interface is
+     available.
+3. **Install Nutshell and open its critical _Select Lightning Backend_ task.**
+   Choose the node you prepared. Nutshell authenticates to that exact node and
+   stores the choice only after validation succeeds.
+4. **Start Nutshell.** It generates its mint seed on first install and uses the
+   selected node. If that node becomes unavailable, Nutshell fails closed and
+   never tries the other backend.
+5. **Run _Mint Info_.** Give the mint a name and description, then add any
+   contact and policy links you want wallets to display before you publish the
+   mint address.
+6. **Run _Advanced Settings_ if you want limits.** Per-deposit,
+   per-redemption, and total-balance ceilings start unlimited.
+7. **Take a backup.** Restore it somewhere safe once to prove the mint and its
+   locked backend selection come back.
 
-Nutshell restarts itself after each of these, which is when the change takes effect.
+For LND, StartOS carries the masked admin macaroon through the internal
+interface and wrapper memory. Nutshell verifies the proxy-terminated HTTPS
+connection against the StartOS root CA and writes the decoded credential to an
+ephemeral file with mode `0600` in its own container. No LND volume is mounted
+and no credential is copied by the operator. The LND credential is not stored
+in wrapper state or intentionally placed in command arguments, environment
+values, action output, or logs. Both the CLN rune and LND admin macaroon are
+highly privileged, so protect access to both services and your StartOS system.
 
 ## Using Nutshell
 
 ### Connecting a wallet
 
-Copy an address from the **Cashu Mint API** interface and add it as a mint in any Cashu wallet — for example [cashu.me](https://cashu.me), or a mobile wallet that supports adding a custom mint.
+Copy an address from the **Cashu Mint API** interface and add it as a mint in
+any Cashu wallet, such as [cashu.me](https://cashu.me) or a mobile wallet that
+supports custom mints.
 
-Test with a small deposit and redemption before anyone else uses it. That round trip is the only thing that proves the Lightning path works end to end; a green health check only means the mint is answering.
+Test with a small deposit and redemption before anyone else uses it. That round
+trip is the only thing that proves the Lightning path works end to end; a green
+health check only means the mint is answering.
 
 ### Actions
 
-- **Mint Info** — the name, descriptions, message of the day, contact details and policy links wallets display for your mint.
-- **Lightning Fees** — how much of each outgoing Lightning payment is held back for routing. Both settings are a *reserve*, not a charge: what isn't needed isn't spent. Too low and redemptions fail to route; too high and redeeming looks expensive.
-- **Advanced Settings** — log level, the fee you charge on inputs, ceilings on deposits, redemptions and total balance, a redemptions-only switch, and API rate limiting.
+- **Mint Info** — name, descriptions, message of the day, contact details, and
+  policy links wallets display for your mint.
+- **Lightning Fees** — the reserve held back for outgoing Lightning routing.
+  Unused reserve is not spent. Too little can make redemptions fail; too much
+  makes redeeming look expensive.
+- **Advanced Settings** — log level, input fee, deposit/redemption/balance
+  ceilings, redemptions-only mode, and API rate limiting.
 
-  > **A limit of 0 means unlimited**, not zero. Leave a limit at 0 to not have one.
+  > **A limit of 0 means unlimited**, not zero.
   >
-  > **Redemptions Only** stops the mint issuing new ecash while leaving what is already out there redeemable. That is how you wind a mint down without stranding your users — turn it on, let people cash out, and only then shut it off.
-- **Mint Status** — confirms the mint seed is still on disk, and shows which Lightning backend, listener and database the mint is using. Run this first if something looks wrong; it works whether or not the service is running.
+  > **Redemptions Only** stops new issuance while leaving existing ecash
+  > redeemable. Use it to wind a mint down without stranding users.
+
+- **Mint Status** — confirms the seed is on disk and shows the locked Lightning
+  backend, listener, database, and log level. It also works while stopped.
+
+## Failure and recovery
+
+The locked backend is authoritative. If it is stopped, unhealthy, uninstalled,
+or rejects its credential, Nutshell remains stopped. Repair, start, initialize,
+unlock, or reinstall that same node, then start Nutshell again. It will not
+inspect or activate another installed Lightning node.
 
 ## Restoring from a backup
 
-Restoring brings back the whole mint — seed, database, and your settings — and nothing needs re-entering. Core Lightning is found again automatically, even if its addresses changed.
+Restoring brings back the seed, database, settings, and locked backend choice.
+Install and start the same backend on the restored StartOS system; its current
+internal address and credential are discovered automatically. No credential
+needs to be re-entered. Older CLN-only backups are migrated to locked CLN.
 
-The one thing a restore cannot do is recover ecash issued *after* the backup was taken. Those tokens exist in people's wallets but not in the restored ledger, and the mint will refuse them. Take a backup after any real activity, not on a schedule you would use for a service that holds nothing.
+A restore cannot recover ecash issued after the backup. Those tokens exist in
+wallets but not in the restored ledger, and the mint will refuse them. Back up
+after real activity, not on a schedule intended for a stateless service.
+
+Test a restore only on an isolated system. Never expose or run the original
+mint and its restored copy at the same time; the two copies can diverge while
+presenting the same mint identity.
 
 ## Limitations
 
-- **Core Lightning is the only supported Lightning backend**, and SQLite the only database. Upstream's other backends, PostgreSQL, Redis caching, management RPC and OIDC login are not available here.
-- **This is the mint only.** Upstream also ships a Cashu wallet; that is not part of this package. Use any Cashu wallet to hold and spend the ecash your mint issues.
+- **The supported Lightning backends are CLNRest and LND REST.** Upstream's
+  other backends are not exposed, and the selected backend cannot be switched.
+- **Lightning must be local to this StartOS system.** Remote or LAN Lightning
+  node configuration is not supported. This does not restrict the public Cashu
+  Mint API, which can still use LAN, Tor, domains, or Start Tunnel.
+- **SQLite is the only database.** PostgreSQL, Redis caching, management RPC,
+  and OIDC login are not exposed.
+- **This is the mint only.** Use a separate Cashu wallet to hold and spend the
+  ecash it issues.

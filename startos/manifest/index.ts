@@ -1,5 +1,5 @@
 import { setupManifest } from '@start9labs/start-sdk'
-import { depClnDescription, long, short } from './i18n'
+import { depClnDescription, depLndDescription, long, short } from './i18n'
 
 export const manifest = setupManifest({
   id: 'nutshell',
@@ -10,7 +10,7 @@ export const manifest = setupManifest({
   marketingUrl: 'https://cashu.space',
   donationUrl: null,
   description: { short, long },
-  volumes: ['main'],
+  volumes: ['main', 'startos'],
   images: {
     main: {
       // Digest-pinned so a rebuild reproduces the image that was tested; see
@@ -25,10 +25,18 @@ export const manifest = setupManifest({
   dependencies: {
     'c-lightning': {
       description: depClnDescription,
-      optional: false,
+      optional: true,
       metadata: {
         title: 'Core Lightning',
         icon: 'https://raw.githubusercontent.com/Start9Labs/cln-startos/refs/heads/master/icon.svg',
+      },
+    },
+    lnd: {
+      description: depLndDescription,
+      optional: true,
+      metadata: {
+        title: 'LND',
+        icon: 'https://raw.githubusercontent.com/Start9Labs/lnd-startos/refs/heads/master/icon.svg',
       },
     },
   },

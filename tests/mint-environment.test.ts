@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { buildMintEnvironment } from '../startos/mintEnvironment.ts'
+import { lndRestRuntime } from '../startos/lightningProbe.ts'
 
 /**
  * Run with `npm test` (plain `node --test` — Node 22 strips the types, so this
@@ -12,7 +13,16 @@ import { buildMintEnvironment } from '../startos/mintEnvironment.ts'
  * `UPDATING.md` lists it as one of the things to re-check on every bump.
  */
 
-const clnrest = { address: '10.0.3.1:3010', rune: 'restricted-rune' }
+const clnrest = {
+  backend: 'clnrest' as const,
+  address: '10.0.3.1:3010',
+  rune: 'cln-rune',
+}
+
+const lndrest = {
+  backend: 'lndrest' as const,
+  address: '10.0.3.1:8080',
+}
 
 const config = {
   mint_info: {
@@ -42,7 +52,7 @@ const config = {
   },
 }
 
-test('builds a fixed CLNRest environment for StartOS', () => {
+test('builds only the CLNRest environment for CLN', () => {
   const env = buildMintEnvironment(config, 'private-key', clnrest)
 
   assert.equal(env.MINT_DATABASE, '/data/mint')
@@ -50,8 +60,36 @@ test('builds a fixed CLNRest environment for StartOS', () => {
   assert.equal(env.MINT_LISTEN_PORT, '3338')
   assert.equal(env.MINT_BACKEND_BOLT11_SAT, 'CLNRestWallet')
   assert.equal(env.MINT_CLNREST_URL, 'http://10.0.3.1:3010')
-  assert.equal(env.MINT_CLNREST_RUNE, 'restricted-rune')
+  assert.equal(env.MINT_CLNREST_RUNE, 'cln-rune')
+  assert.equal('MINT_LND_REST_ENDPOINT' in env, false)
+  assert.equal('MINT_LND_REST_CERT' in env, false)
+  assert.equal('MINT_LND_REST_MACAROON' in env, false)
+  assert.equal('MINT_LND_REST_CERT_VERIFY' in env, false)
   assert.equal(env.MINT_PRIVATE_KEY, 'private-key')
+})
+
+test('builds only the verified LND REST environment for LND', () => {
+  const env = buildMintEnvironment(null, 'seed', lndrest)
+
+  assert.equal(env.MINT_BACKEND_BOLT11_SAT, 'LndRestWallet')
+  assert.equal(env.MINT_LND_REST_ENDPOINT, 'https://10.0.3.1:8080')
+  assert.equal(env.MINT_LND_REST_CERT, lndRestRuntime.rootCaPath)
+  assert.equal(env.MINT_LND_REST_MACAROON, lndRestRuntime.macaroon)
+  assert.equal(env.MINT_LND_REST_CERT_VERIFY, 'true')
+  assert.equal('MINT_CLNREST_URL' in env, false)
+  assert.equal('MINT_CLNREST_RUNE' in env, false)
+})
+
+test('does not accept caller-controlled LND credential paths', () => {
+  const env = buildMintEnvironment(null, 'seed', {
+    ...lndrest,
+    // @ts-expect-error LND credential paths are fixed by the StartOS runtime.
+    rootCaPath: '/caller/ca.pem',
+    macaroonPath: '/caller/admin.macaroon',
+  })
+
+  assert.equal(env.MINT_LND_REST_CERT, lndRestRuntime.rootCaPath)
+  assert.equal(env.MINT_LND_REST_MACAROON, lndRestRuntime.macaroon)
 })
 
 test('maps operator settings to current Nutshell environment variables', () => {

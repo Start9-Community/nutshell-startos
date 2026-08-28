@@ -7,7 +7,7 @@ const dict = {
   'The mint is responsive': 2,
   'The mint is not ready': 3,
   'Core Lightning is not reachable on the internal network. Make sure Core Lightning is installed, running, and has CLNRest enabled in its config.': 4,
-  "Core Lightning's CLNRest rune could not be read. Enable CLNRest in Core Lightning's config, restart it, and start Nutshell again.": 5,
+  "Core Lightning's CLNRest rune could not be read. Ensure CLNRest remains enabled in Core Lightning's config, restart it, and start Nutshell again.": 5,
 
   // interfaces.ts
   'Cashu Mint API': 6,
@@ -77,6 +77,21 @@ const dict = {
   'Database Path': 62,
   'Where the mint database is stored inside the container.': 63,
   'Current logging verbosity.': 64,
+
+  // actions/selectLightningBackend.ts
+  'Select Lightning Backend': 65,
+  'Choose the Lightning node this mint will use. The selection cannot be changed after it is validated.': 66,
+  'This choice is permanent for this mint.': 67,
+  'Lightning Node': 68,
+  'Core Lightning (CLNRest)': 69,
+  'LND (REST)': 70,
+
+  // init/taskSelectLightningBackend.ts
+  'Select the Lightning backend before starting Nutshell. This choice is permanent for this mint.': 71,
+
+  // lightningConnection.ts
+  'Core Lightning validation failed. Make sure Core Lightning is installed and running with CLNRest enabled, then try again.': 72,
+  'LND validation failed. Make sure LND is installed, running, and its wallet is initialized and unlocked, then try again.': 73,
 } as const
 
 /**

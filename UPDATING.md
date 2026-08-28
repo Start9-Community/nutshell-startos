@@ -24,16 +24,48 @@ away. Check:
 - renamed or removed environment variables — `startos/mintEnvironment.ts` builds the whole
   environment, and a renamed variable is not a type error: the mint starts anyway, on defaults;
 - Python command or image working-directory changes (`exec.command` in `startos/main.ts`);
-- CLNRest URL, rune, and transport behavior;
+- CLNRest URL, rune, interface suffix, and plaintext bridge behavior;
+- LND REST environment names, proxy-terminated HTTPS behavior, StartOS-root
+  verification, and admin-macaroon encoding;
 - data paths and file ownership — `MINT_DATABASE` is a directory, and `mintDatabaseFile` in
   `startos/utils.ts` reports the filename inside it;
 - supported architectures in the image manifest.
 
-Two cross-package claims are worth re-checking on any cln bump rather than a Nutshell one:
+Cross-package contracts must be re-checked when either Lightning package moves,
+not only when Nutshell moves.
+
+For Core Lightning:
+
 `clnrestPort` is imported from `cln-startos/startos/utils` (so a change there is a build failure
 here), but the `clnrest` host id and the `?rune=` query parameter are read by convention from
 `cln-startos/startos/interfaces.ts`. If cln stops publishing the rune that way, `main.ts` throws
 instead of starting a mint with no Lightning backend — loud, but still a break.
+The supported CLN package enables CLNRest by default; confirm that it remains
+enabled. Its application rune is highly privileged: the pinned package calls
+`createrune null [["For Application#"]]`, where `#` makes the remainder a
+comment rather than a demonstrated restriction. Runtime must retain the last
+rune across a temporary `null` suffix during rotation, while one-shot
+validation, address loss, and a changed malformed suffix still fail closed.
+
+For LND, `controlHostId`, `restPort`, and `lndconnectRestId` are imported from
+`lnd-startos/startos/interfaces`. Its masked `lnd-connect-rest` suffix must
+continue to expose exactly one `query.macaroon` containing canonical base64url
+raw admin-macaroon bytes. Runtime reads the address and suffix reactively;
+validation reads them once. The wrapper decodes the credential in memory,
+creates the fixed nested directory, writes the raw bytes with mode `0600`, and
+requires the ephemeral file with exact `test -s` before probing or launching.
+The LND admin macaroon is also highly privileged. It transits the masked
+interface and wrapper memory but is not persisted in wrapper state or
+intentionally placed in argv, environment values, action output, or logs.
+Neither Lightning dependency volume is mounted. Do not replace this with a
+dependency file mount: the pinned SDK/OS stack does not support dependency file
+mounts end to end, and mounting the whole LND volume overexposes node state.
+
+The LND bridge is HTTPS terminated by the StartOS proxy. Nutshell must continue
+to verify it against the root returned by `sdk.getSslCertificate(effects, [])`;
+LND's own `tls.cert` is not the trust anchor for this path. Never make
+`MINT_LND_REST_CERT_VERIFY` configurable or disable it to get a device test
+through.
 
 ## Applying the bump
 
@@ -60,22 +92,58 @@ npm ci
 npm test
 npm run check
 npm run build
-npm run test:smoke        # pass the previously packaged image as $1
+# For an upstream image bump only:
+tests/smoke-nutshell.sh <previously-packaged-image>
 make x86
 make arm
 ```
 
 `test:smoke` writes a database with the previously packaged image, migrates it with the newly
 pinned one, and asserts the schema version moved. Its baseline image is an argument, so pass the
-version you are upgrading *from*:
+version you are upgrading _from_:
 
 ```sh
 tests/smoke-nutshell.sh cashubtc/nutshell:0.20.3
 ```
 
-Then install on a StartOS server and drive it: the daemon starts, the health check goes green,
-and the Mint Status action reports the seed present. For a migration-bearing release, restore a
-disposable copy of a production-shaped backup, update it, and **exercise a real mint and melt**
-before tagging — a listening port proves the mint is serving, not that it can settle a payment.
+Skip this migration smoke test for a wrapper-only downstream revision that
+keeps the same pinned upstream image: there is no new upstream schema migration
+to assert, and using the same image as both baseline and target must not report
+a version increase.
 
-Tags are `v<upstream>_<downstream>`. Do not create or push the tag until the device test is done.
+Build and inspect both declared architectures from the same reviewed commit.
+The release gate requires successful `x86_64` and `aarch64` package builds and
+manifest/commitment inspection. Current device evidence is available only on
+the authorized disposable x86 StartOS VM; ARM evidence is build-and-inspection
+only until an authorized ARM device is available. Do not describe an ARM
+runtime as tested without that evidence.
+
+On x86, verify three paths before approving the release PR for merge:
+
+1. update an existing released `0.20.3:1` CLN mint and confirm it becomes locked CLN
+   without a new selection task or data loss;
+2. fresh-install, select CLN, and confirm the highly privileged interface-rune
+   path starts; and
+3. fresh-install alongside initialized and unlocked LND, select LND, and prove
+   the exact proxy HTTPS path uses the StartOS root and interface-delivered
+   ephemeral admin macaroon with certificate verification enabled.
+
+For every path, confirm the daemon starts, the health check goes green, and
+Mint Status reports the seed and actual backend. Back up and restore the locked
+selection, then confirm failure of the selected node stops Nutshell without
+fallback. Keep the public mint exposure test independent: LAN, Tor, domains,
+and Start Tunnel do not alter the internal same-StartOS Lightning connection.
+Perform restore testing on an isolated system, and never expose or run the
+original mint and restored copy simultaneously.
+
+For a migration-bearing release, restore a disposable production-shaped backup,
+update it, and exercise the authorized non-production lifecycle evidence before
+approving the PR. A listening port proves only that the mint is serving; any
+real mint or melt test requires explicit authorization because it performs a
+financial operation.
+
+The reviewed PR and merge are the human release gate. After a non-documentation
+change reaches Community `main`, `.github/workflows/tagAndRelease.yml` invokes
+the Community release automation, which creates and publishes the
+`v<upstream>_<downstream>` tag and release. Do not create or push that tag
+manually.

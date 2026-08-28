@@ -1,5 +1,7 @@
 import { configYaml } from '../fileModels/config.yaml'
+import { storeJson } from '../fileModels/store.json'
 import { i18n } from '../i18n'
+import { backendDisplayName } from '../lightningRuntime'
 import { sdk } from '../sdk'
 import { MINT_HOST, MINT_PORT } from '../mintEnvironment'
 import { mintDatabaseFile, mintSeedFile } from '../utils'
@@ -23,6 +25,9 @@ export const showMintInfo = sdk.Action.withoutInput(
 
   async ({ effects }) => {
     const logLevel = await configYaml.read((c) => c.advanced.log_level).once()
+    const backend = await storeJson
+      .read((store) => store.lightningBackend)
+      .once()
     const hasSeed = await sdk.volumes.main
       .readFile(mintSeedFile, 'utf-8')
       .then((k) => String(k).trim().length > 0)
@@ -52,7 +57,7 @@ export const showMintInfo = sdk.Action.withoutInput(
               'The wallet backend the mint settles payments through.',
             ),
             type: 'single' as const,
-            value: 'CLNRestWallet',
+            value: backendDisplayName(backend),
             copyable: false,
             qr: false,
             masked: false,

@@ -6,6 +6,7 @@ import { sdk } from '../sdk'
 import { versionGraph } from '../versions'
 import { generateMintSeed } from './generateMintSeed'
 import { seedFiles } from './seedFiles'
+import { taskSelectLightningBackend } from './taskSelectLightningBackend'
 
 export const init = sdk.setupInit(
   restoreInit,
@@ -14,6 +15,7 @@ export const init = sdk.setupInit(
   setInterfaces,
   setDependencies,
   actions,
+  taskSelectLightningBackend,
   generateMintSeed,
 )
 
