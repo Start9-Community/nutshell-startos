@@ -92,7 +92,8 @@ npm ci
 npm test
 npm run check
 npm run build
-npm run test:smoke        # pass the previously packaged image as $1
+# For an upstream image bump only:
+tests/smoke-nutshell.sh <previously-packaged-image>
 make x86
 make arm
 ```
@@ -104,6 +105,11 @@ version you are upgrading _from_:
 ```sh
 tests/smoke-nutshell.sh cashubtc/nutshell:0.20.3
 ```
+
+Skip this migration smoke test for a wrapper-only downstream revision that
+keeps the same pinned upstream image: there is no new upstream schema migration
+to assert, and using the same image as both baseline and target must not report
+a version increase.
 
 Build and inspect both declared architectures from the same reviewed commit.
 The release gate requires successful `x86_64` and `aarch64` package builds and
