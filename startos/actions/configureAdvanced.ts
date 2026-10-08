@@ -8,7 +8,7 @@ const inputSpec = InputSpec.of({
   log_level: Value.select({
     name: i18n('Log Level'),
     description: i18n(
-      'Verbosity of the mint log. DEBUG is useful when troubleshooting.',
+      '- DEBUG: the most detail; turn it on while troubleshooting, then switch back\n- INFO: normal operation\n- WARNING: only warnings and errors\n- ERROR: only errors',
     ),
     warning: null,
     default: 'INFO',

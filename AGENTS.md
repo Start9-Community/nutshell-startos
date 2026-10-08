@@ -18,25 +18,23 @@ Freshly scaffolded? Work the
 guide page, not a file in this repo — read it, don't copy it in.
 
 Keep `README.md` (technical reference for an AI support or administering agent) and
-`instructions.md` (end-user docs) in sync with your changes.
+`instructions.md` (end-user docs) in sync with your changes. This file restates neither:
+whoever changes the package has both, so it carries only what they don't — repo mechanics,
+a change that looks right and is not, where the next thing gets added, a naming trap, a
+build or test invocation particular to this repo.
 
-**Bugs and feature requests are GitHub issues on this repo** — file them as you find them.
+**Fix a defect you spot rather than reporting it** — you have the package open and the
+context to be sure. File **a GitHub issue on this repo** only when the call isn't yours to
+make: you can't pin the cause down, two defensible fixes exist, or it's too large to ride on
+the work in hand. An open issue is a report, not a queue — implement one when you're asked
+to or when it's labelled `Approved`, then close it with `Closes #<n>`.
+
 Don't record work in the repo instead: no `TODO.md`, no `NOTES.md`, no `PLAN.md`. What you
 verified, tried, and decided belongs in the commit message and the PR body.
 
 ## This repo
 
-- **The mint seed is the one irreplaceable thing here.** Every proof the mint has ever issued derives from `mint_private_key`, and restore replays init as `kind === 'install'` — so the existence check in `init/generateMintSeed.ts` is what stops a restore minting a fresh seed and orphaning every outstanding token. Never make that write unconditional.
-- **The image is digest-pinned.** `startos/manifest/index.ts` carries `cashubtc/nutshell:<version>@sha256:<digest>` so a rebuild reproduces the image that was tested. Bumping the tag without the digest is not a bump — see `UPDATING.md`.
-- **`startos/mintEnvironment.ts` is import-free on purpose**, so `tests/mint-environment.test.ts` runs under plain `node --test` with no SDK and no framework. Node's resolver needs full specifiers, so *any* relative import added there breaks the test rather than the build. Its config type is hand-written and its fields are **required** — that is what turns a rename in `fileModels/config.yaml.ts` into a compile error at the `main.ts` call site instead of a silently-defaulted variable.
-- **Import `clnrestPort` from `cln-startos/startos/utils`, not a literal**, so a port change on cln's side is a build failure here. The host id is inlined because cln exports only its peer and watchtower ids.
-- **The CLNRest rune is scraped from the interface's `?rune=` suffix.** That is the only way a dependent reads it without mounting cln's volume, and it is a real contract with `cln-startos/startos/interfaces.ts` — if cln stops publishing the rune as a query parameter, `main.ts` throws rather than starting a mint with no Lightning backend. Both that throw and the missing-address throw are deliberate: a mint that starts without a backend takes deposits it cannot settle. The suffix watch ignores an absent value for that reason — cln de-exports the interface while Revoke Runes mints a replacement, and reacting to that gap would throw on a mint whose backend is fine.
-- **`MINT_DATABASE` is a directory, not a file.** Nutshell writes `mint.sqlite3` inside it; `mintDatabaseFile` in `utils.ts` is what the Mint Status action reports, and the two must agree.
-- **A zero limit means "omit the variable".** Nutshell reads an unset mint/melt/balance limit as unlimited, so sending a literal `0` would cap every operation at nothing.
-- **Only CLNRest is supported.** Don't expose another upstream backend until its credentials, dependency lifecycle, tests, and docs are all implemented.
-- **The internal listener is fixed.** External addressing and TLS belong to StartOS interfaces; don't add user-configurable bind ports.
-- **Default branch is `main`, not `master`.** Its CI workflows reference `main`; leave them.
-
-## Inspecting a running install
-
-`start-cli package attach nutshell -n nutshell-sub -- <cmd>` — the package runs one subcontainer, named `nutshell-sub`.
+- **Never make the seed write in `init/generateMintSeed.ts` unconditional.** Restore replays init as `kind === 'install'`, and a fresh `mint_private_key` orphans every token the mint has issued.
+- **Bump the image's `@sha256` digest together with its tag** in `startos/manifest/index.ts`, as `UPDATING.md` describes; a tag alone is not a bump.
+- **Keep `startos/mintEnvironment.ts` import-free.** `tests/mint-environment.test.ts` runs it under plain `node --test`, where a relative import breaks the test.
+- **Keep `main.ts` refusing to start when CLNRest's address or rune can't be read.** A mint without a Lightning backend takes deposits it cannot settle.

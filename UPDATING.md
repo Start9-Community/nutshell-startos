@@ -58,8 +58,6 @@ Verify the index contains `linux/amd64` and `linux/arm64`, then:
 ```sh
 npm ci
 npm test
-npm run check
-npm run build
 npm run test:smoke        # pass the previously packaged image as $1
 make x86
 make arm

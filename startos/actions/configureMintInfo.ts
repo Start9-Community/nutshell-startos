@@ -20,7 +20,9 @@ const inputSpec = InputSpec.of({
   }),
   description: Value.text({
     name: i18n('Description'),
-    description: i18n('Short description of your mint.'),
+    description: i18n(
+      'A sentence or two about your mint, published in its public info.',
+    ),
     warning: null,
     default: 'A private Cashu ecash mint.',
     required: false,
@@ -33,7 +35,9 @@ const inputSpec = InputSpec.of({
   }),
   description_long: Value.text({
     name: i18n('Long Description'),
-    description: i18n('Extended description with more detail about your mint.'),
+    description: i18n(
+      'Optional longer text about your mint, published in its public info.',
+    ),
     warning: null,
     default: '',
     required: false,
@@ -59,7 +63,9 @@ const inputSpec = InputSpec.of({
   }),
   contact_email: Value.text({
     name: i18n('Contact Email'),
-    description: i18n('Operator email address.'),
+    description: i18n(
+      "Published in your mint's public info so users can reach you.",
+    ),
     warning: null,
     default: '',
     required: false,
@@ -72,7 +78,9 @@ const inputSpec = InputSpec.of({
   }),
   contact_nostr: Value.text({
     name: i18n('Contact Nostr'),
-    description: i18n('Operator Nostr public key (npub or hex).'),
+    description: i18n(
+      "Your Nostr public key (npub or hex), published in your mint's public info so users can reach you.",
+    ),
     warning: null,
     default: '',
     required: false,
@@ -85,7 +93,9 @@ const inputSpec = InputSpec.of({
   }),
   contact_twitter: Value.text({
     name: i18n('Contact Twitter/X'),
-    description: i18n('Operator Twitter/X handle.'),
+    description: i18n(
+      "Your Twitter/X handle, published in your mint's public info so users can reach you.",
+    ),
     warning: null,
     default: '',
     required: false,

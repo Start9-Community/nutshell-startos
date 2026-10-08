@@ -2,7 +2,7 @@ import { FileHelper, z } from '@start9labs/start-sdk'
 import { sdk } from '../sdk'
 
 const mintInfoShape = z
-  .object({
+  .looseObject({
     name: z.string().catch('My Sovereign Mint'),
     description: z.string().catch('A private Cashu ecash mint.'),
     description_long: z.string().catch(''),
@@ -26,14 +26,14 @@ const mintInfoShape = z
   })
 
 const feesShape = z
-  .object({
+  .looseObject({
     fee_percent: z.number().catch(0),
     fee_reserve_min: z.number().int().min(0).catch(100),
   })
   .catch({ fee_percent: 0, fee_reserve_min: 100 })
 
 const advancedShape = z
-  .object({
+  .looseObject({
     log_level: z.enum(['DEBUG', 'INFO', 'WARNING', 'ERROR']).catch('INFO'),
     input_fee_ppk: z.number().int().min(0).catch(0),
     max_peg_in: z.number().int().min(0).catch(0),
@@ -54,7 +54,7 @@ const advancedShape = z
     rate_limit_per_minute: 60,
   })
 
-const shape = z.object({
+const shape = z.looseObject({
   mint_info: mintInfoShape,
   fees: feesShape,
   advanced: advancedShape,
